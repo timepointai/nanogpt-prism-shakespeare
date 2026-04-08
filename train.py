@@ -59,6 +59,8 @@ prism_init = False # enable Prism (Spectral Imprint + EigenTransfer)
 prism_align = 0.75 # UV alignment strength (0 = spectral only, 1 = full alignment)
 prism_spectra = '' # path to spectra.json (empty = extract from HF GPT-2)
 prism_directions = '' # path to directions.pt (empty = extract from HF GPT-2)
+prism_mod = 0.0 # spectral modulation strength (0 = off, e.g. 0.01 = gentle pull)
+prism_mod_decay = 0.999 # per-step decay of modulation strength
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -205,6 +207,13 @@ if prism_init and init_from == 'scratch':
                 spectra_path=prism_spectra or None,
                 directions_path=prism_directions or None)
     print("Prism init complete.")
+    # Capture spectral targets for modulation (before compile changes the model)
+    if prism_mod > 0:
+        prism_targets = {name: param.data.clone().cpu()
+                         for name, param in model.named_parameters()
+                         if param.dim() >= 2}
+        print(f"[prism] Captured {len(prism_targets)} spectral targets for modulation "
+              f"(strength={prism_mod}, decay={prism_mod_decay})")
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
@@ -326,6 +335,16 @@ while True:
     scaler.update()
     # flush the gradients as soon as we can, no need for this memory anymore
     optimizer.zero_grad(set_to_none=True)
+
+    # spectral modulation — gently pull weights toward spectral targets
+    if prism_mod > 0 and 'prism_targets' in dir():
+        current_mod = prism_mod * (prism_mod_decay ** iter_num)
+        if current_mod > 1e-6:
+            raw_model = model.module if ddp else model
+            with torch.no_grad():
+                for name, param in raw_model.named_parameters():
+                    if name in prism_targets:
+                        param.data.lerp_(prism_targets[name].to(param.device), current_mod)
 
     # timing and logging
     t1 = time.time()
