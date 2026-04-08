@@ -57,6 +57,8 @@ bias = False # do we use bias inside LayerNorm and Linear layers?
 # prism spectral initialization
 prism_init = False # enable Prism (Spectral Imprint + EigenTransfer)
 prism_align = 0.75 # UV alignment strength (0 = spectral only, 1 = full alignment)
+prism_spectra = '' # path to spectra.json (empty = extract from HF GPT-2)
+prism_directions = '' # path to directions.pt (empty = extract from HF GPT-2)
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -199,7 +201,9 @@ model.to(device)
 if prism_init and init_from == 'scratch':
     from prism_init import apply_prism
     print(f"Applying Prism init (align={prism_align})...")
-    apply_prism(model, align_strength=prism_align, lam=1.0)
+    apply_prism(model, align_strength=prism_align, lam=1.0,
+                spectra_path=prism_spectra or None,
+                directions_path=prism_directions or None)
     print("Prism init complete.")
 
 # initialize a GradScaler. If enabled=False scaler is a no-op

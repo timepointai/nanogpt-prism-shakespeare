@@ -209,20 +209,40 @@ def extract_directions(force=False):
 
 # ── Application ──
 
-def apply_prism(model, align_strength=0.75, lam=1.0, verbose=True):
+def apply_prism(model, align_strength=0.75, lam=1.0,
+                spectra_path=None, directions_path=None, verbose=True):
     """Apply Prism initialization to a nanoGPT model.
 
-    Spectral Imprint: reshape singular values to match pretrained spectrum.
-    EigenTransfer: blend singular vectors toward pretrained directions.
+    Spectral Imprint: reshape singular values to match extracted spectrum.
+    EigenTransfer: blend singular vectors toward extracted directions.
 
     Args:
         model: nanoGPT GPT model (after GPT(config), before torch.compile)
         align_strength: 0.0 = spectral only, 1.0 = full UV alignment
         lam: spectral blending (0 = flat, 1 = full shape)
+        spectra_path: path to spectra.json (if None, extracts from HF GPT-2)
+        directions_path: path to directions.pt (if None, extracts from HF GPT-2)
         verbose: print per-matrix info
     """
-    spectra = extract_spectra()
-    directions = extract_directions() if align_strength > 0 else {}
+    # Load spectra — from custom path or default HF GPT-2 extraction
+    if spectra_path and os.path.exists(spectra_path):
+        with open(spectra_path) as f:
+            spectra = json.load(f)
+        if verbose:
+            print(f'[prism] Loaded spectra from {spectra_path}')
+    else:
+        spectra = extract_spectra()
+
+    # Load directions — from custom path or default HF GPT-2 extraction
+    if align_strength > 0:
+        if directions_path and os.path.exists(directions_path):
+            directions = torch.load(directions_path, map_location='cpu', weights_only=False)
+            if verbose:
+                print(f'[prism] Loaded directions from {directions_path}')
+        else:
+            directions = extract_directions()
+    else:
+        directions = {}
 
     n_shaped = 0
     n_skipped = 0
