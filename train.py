@@ -61,6 +61,9 @@ prism_spectra = '' # path to spectra.json (empty = extract from HF GPT-2)
 prism_directions = '' # path to directions.pt (empty = extract from HF GPT-2)
 prism_mod = 0.0 # spectral modulation strength (0 = off, e.g. 0.01 = gentle pull)
 prism_mod_decay = 0.999 # per-step decay of modulation strength
+prism_mod_sustain = 0.0 # sustain phase strength (0 = use single-phase mod)
+prism_mod_sustain_decay = 0.9999 # sustain phase decay
+prism_mod_transition = 0 # step to switch from attack to sustain (0 = single phase)
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -336,9 +339,16 @@ while True:
     # flush the gradients as soon as we can, no need for this memory anymore
     optimizer.zero_grad(set_to_none=True)
 
-    # spectral modulation — gently pull weights toward spectral targets
+    # spectral modulation — pull weights toward spectral targets (the "mod wheel")
+    # Two-phase ADSR: attack phase (strong, fast decay) → sustain phase (gentle, slow decay)
     if prism_mod > 0 and 'prism_targets' in dir():
-        current_mod = prism_mod * (prism_mod_decay ** iter_num)
+        if prism_mod_transition > 0 and iter_num >= prism_mod_transition:
+            # Sustain phase
+            steps_in_sustain = iter_num - prism_mod_transition
+            current_mod = prism_mod_sustain * (prism_mod_sustain_decay ** steps_in_sustain)
+        else:
+            # Attack phase
+            current_mod = prism_mod * (prism_mod_decay ** iter_num)
         if current_mod > 1e-6:
             raw_model = model.module if ddp else model
             with torch.no_grad():
