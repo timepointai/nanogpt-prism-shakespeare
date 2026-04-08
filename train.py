@@ -54,6 +54,9 @@ n_head = 12
 n_embd = 768
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
+# prism spectral initialization
+prism_init = False # enable Prism (Spectral Imprint + EigenTransfer)
+prism_align = 0.75 # UV alignment strength (0 = spectral only, 1 = full alignment)
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -191,6 +194,13 @@ if block_size < model.config.block_size:
     model.crop_block_size(block_size)
     model_args['block_size'] = block_size # so that the checkpoint will have the right value
 model.to(device)
+
+# Prism spectral initialization (after model creation, before compile)
+if prism_init and init_from == 'scratch':
+    from prism_init import apply_prism
+    print(f"Applying Prism init (align={prism_align})...")
+    apply_prism(model, align_strength=prism_align, lam=1.0)
+    print("Prism init complete.")
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
