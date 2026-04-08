@@ -64,6 +64,7 @@ prism_mod_decay = 0.999 # per-step decay of modulation strength
 prism_mod_sustain = 0.0 # sustain phase strength (0 = use single-phase mod)
 prism_mod_sustain_decay = 0.9999 # sustain phase decay
 prism_mod_transition = 0 # step to switch from attack to sustain (0 = single phase)
+prism_unfold = 0 # re-extract spectral targets every N steps (0 = fixed targets)
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -355,6 +356,16 @@ while True:
                 for name, param in raw_model.named_parameters():
                     if name in prism_targets:
                         param.data.lerp_(prism_targets[name].to(param.device), current_mod)
+
+    # spectral unfolding — re-extract targets from current model
+    if prism_unfold > 0 and 'prism_targets' in dir() and iter_num > 0 and iter_num % prism_unfold == 0:
+        raw_model = model.module if ddp else model
+        with torch.no_grad():
+            prism_targets = {name: param.data.clone().cpu()
+                             for name, param in raw_model.named_parameters()
+                             if param.dim() >= 2}
+        if master_process:
+            print(f"[prism] Unfolded: re-extracted {len(prism_targets)} spectral targets at step {iter_num}")
 
     # timing and logging
     t1 = time.time()
