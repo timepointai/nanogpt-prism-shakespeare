@@ -196,10 +196,11 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt', type=str, help='Path to nanoGPT checkpoint')
     parser.add_argument('--hf', type=str, help='HuggingFace model name (e.g. gpt2)')
     parser.add_argument('--out', type=str, default='.prism_cache/extracted')
+    parser.add_argument('--n_dct', type=int, default=8, help='DCT coefficients per group (default 8 = 128 bytes)')
     args = parser.parse_args()
 
     if args.ckpt:
-        extract_from_checkpoint(args.ckpt, args.out)
+        extract_from_checkpoint(args.ckpt, args.out, n_dct=args.n_dct)
     elif args.hf:
         extract_from_pretrained_hf(args.hf, args.out)
     else:
