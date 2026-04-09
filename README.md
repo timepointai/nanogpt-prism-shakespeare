@@ -13,7 +13,7 @@ quality, then surpasses it without overfitting.
 
 *Validated on nanoGPT Shakespeare. Untested at scale.*
 
-**[Run the eval in Colab →](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_eval.ipynb)** One cell. One number. Reproducible.
+**[Run the eval in Colab →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb)** One cell. One number. Reproducible.
 
 ## The Result
 
@@ -98,11 +98,11 @@ All results use the same rigorous eval setup:
 
 ## Reproduce It
 
-**Colab (easiest):** [Run the eval →](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_eval.ipynb)
+**Colab (easiest):** [Run the eval →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb)
 
 **Local:**
 ```bash
-git clone https://github.com/realityinspector/nanogpt-prism.git
+git clone https://github.com/timepointai/nanogpt-prism-shakespeare.git
 cd nanogpt-prism/src
 pip install transformers tiktoken datasets
 python prism_eval.py
@@ -182,5 +182,4 @@ Apache 2.0.
 
 ---
 
-*Created by [Sean McDonald](https://x.com/seanmcdonaldxyz) — unfunded indie
-research, April 2026.*
+*Created by [Sean McDonald](https://x.com/seanmcdonaldxyz) · A [Timepoint Labs](https://timepointai.com) project · April 2026.*

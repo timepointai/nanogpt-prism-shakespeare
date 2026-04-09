@@ -114,5 +114,5 @@ The 6e-4 base LR changes the dynamics — we may find a different sweet spot.
 
 - PR to karpathy/nanoGPT
 - Create branches on karpathy/nanoGPT
-- Push to any remote that is not realityinspector/nanogpt-prism
+- Push to any remote that is not timepointai/nanogpt-prism-shakespeare
 - Claim benchmark results without full 600K step reproduction

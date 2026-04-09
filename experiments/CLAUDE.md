@@ -7,7 +7,7 @@
 ## Critical Rules
 - NEVER push to karpathy/nanoGPT or create PRs against it
 - NEVER create branches on karpathy/nanoGPT
-- Only push to realityinspector/nanogpt-prism
+- Only push to timepointai/nanogpt-prism-shakespeare
 - This is a standalone clone, NOT a fork
 
 ## Testing Rules
