@@ -6,6 +6,8 @@ Prism accelerates neural network training from scratch by transferring the
 spectral fingerprint of a trained model's weight structure to a fresh
 initialization.
 
+**[Run the eval in Colab →](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_eval.ipynb)** One cell. One number. Reproducible.
+
 ## The Result
 
 Tested on nanoGPT Shakespeare (char-level, 10.65M params), evaluated on
@@ -87,29 +89,20 @@ All results use the same rigorous eval setup:
   runs. Seed variance measured in earlier experiments: Sprint speedup ranges
   3.8-4.8x across seeds.
 
-## Quick Start
+## Reproduce It
 
+**Colab (easiest):** [Run the eval →](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_eval.ipynb)
+
+**Local:**
 ```bash
 git clone https://github.com/realityinspector/nanogpt-prism.git
-cd nanogpt-prism
+cd nanogpt-prism/src
 pip install transformers tiktoken datasets
-
-# Prepare data
-python data/shakespeare_char/prepare.py
-
-# Train teacher (once)
-python train.py config/train_shakespeare_char.py --max_iters=2000 \
-    --out_dir=out-teacher --always_save_checkpoint=True
-
-# Extract spectral fingerprint (once)
-python prism_extract.py --ckpt out-teacher/ckpt.pt --out .prism_cache/teacher
-
-# Train with Prism Recipe
-python train.py config/train_shakespeare_char.py config/prism_recipe.py
+python prism_eval.py
 ```
 
-Or run the Colab notebook:
-**[The Prism Recipe](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_recipe.ipynb)**
+This trains a teacher, extracts the spectral fingerprint, runs baseline
+and Prism, and prints the Prism Score. ~6 min on A100, ~20 min on T4.
 
 ## How It Was Developed
 
@@ -139,6 +132,22 @@ learning_rate = 5e-4   # half the Shakespeare default
 warmup_iters = 50
 prism_mod = 0.01       # mod wheel strength
 prism_mod_decay = 0.9999  # halves every ~7000 steps
+```
+
+## Repo Structure
+
+```
+README.md                    ← You are here
+RESULTS.md                   ← Detailed findings, compression tiers
+nanogpt_prism_eval.ipynb     ← One-click Colab eval
+config/prism_recipe.py       ← The 8-line winning config
+src/
+  prism_eval.py              ← Standardized benchmark (produces Prism Score)
+  prism_init.py              ← Spectral Imprint + EigenTransfer + Mod Wheel
+  prism_extract.py           ← Extract fingerprint from any checkpoint
+  train.py                   ← nanoGPT + 15 lines for Prism
+  model.py                   ← nanoGPT model (unmodified)
+experiments/                 ← 80+ experimental runs, notebooks, planning docs
 ```
 
 ## Limitations
