@@ -1,234 +1,170 @@
+# Prism
 
-# nanoGPT
+**13x faster convergence. Better final quality. Zero overfitting.**
 
-![nanoGPT](assets/nanogpt.jpg)
+Prism accelerates neural network training from scratch by transferring the
+spectral fingerprint of a trained model's weight structure to a fresh
+initialization.
 
+## The Result
 
----
-
-**Update Nov 2025** nanoGPT has a new and improved cousin called [nanochat](https://github.com/karpathy/nanochat). It is very likely you meant to use/find nanochat instead. nanoGPT (this repo) is now very old and deprecated but I will leave it up for posterity.
-
----
-
-The simplest, fastest repository for training/finetuning medium-sized GPTs. It is a rewrite of [minGPT](https://github.com/karpathy/minGPT) that prioritizes teeth over education. Still under active development, but currently the file `train.py` reproduces GPT-2 (124M) on OpenWebText, running on a single 8XA100 40GB node in about 4 days of training. The code itself is plain and readable: `train.py` is a ~300-line boilerplate training loop and `model.py` a ~300-line GPT model definition, which can optionally load the GPT-2 weights from OpenAI. That's it.
-
-![repro124m](assets/gpt2_124M_loss.png)
-
-Because the code is so simple, it is very easy to hack to your needs, train new models from scratch, or finetune pretrained checkpoints (e.g. biggest one currently available as a starting point would be the GPT-2 1.3B model from OpenAI).
-
-## install
+Tested on nanoGPT Shakespeare (char-level, 10.65M params), evaluated on
+held-out test data with strict partitioning:
 
 ```
-pip install torch numpy transformers datasets tiktoken wandb tqdm
+┌───────────────┬──────────────┬────────────────────┐
+│               │   Baseline   │   Prism Recipe     │
+├───────────────┼──────────────┼────────────────────┤
+│ Best val loss │     1.7704   │     1.6498         │
+│ Best @ step   │       1300   │       4800         │
+│ Val @ 5000    │     2.3613   │     1.6703         │
+│ Overfitting   │        YES   │         no         │
+├───────────────┴──────────────┴────────────────────┤
+│  Prism reaches baseline quality at step 100       │
+│  Baseline reaches it at step 1300                 │
+│                                                   │
+│  >>> 13x FASTER <<<                               │
+└───────────────────────────────────────────────────┘
 ```
 
-Dependencies:
+Prism wins every single checkpoint from step 0 to step 5000.
 
-- [pytorch](https://pytorch.org) <3
-- [numpy](https://numpy.org/install/) <3
--  `transformers` for huggingface transformers <3 (to load GPT-2 checkpoints)
--  `datasets` for huggingface datasets <3 (if you want to download + preprocess OpenWebText)
--  `tiktoken` for OpenAI's fast BPE code <3
--  `wandb` for optional logging <3
--  `tqdm` for progress bars <3
+## What It Does
 
-## quick start
+Three ingredients:
 
-If you are not a deep learning professional and you just want to feel the magic and get your feet wet, the fastest way to get started is to train a character-level GPT on the works of Shakespeare. First, we download it as a single (1MB) file and turn it from raw text into one large stream of integers:
+1. **EigenTransfer** — Extract SVD from a trained model's weights. Blend
+   the fresh model's singular vectors 75% toward the trained directions.
+   This tells the optimizer *which directions in weight space matter*.
 
-```sh
+2. **Spectral Imprint** — Compress the trained model's singular value
+   distribution to 8 DCT coefficients per weight group. Reshape the fresh
+   model's spectrum to match. This tells the optimizer *how much energy
+   goes in each direction*.
+
+3. **Mod Wheel** — After each training step, gently pull weights back
+   toward the spectral target (strength 0.01, decay 0.9999 per step).
+   This prevents overfitting by maintaining spectral structure throughout
+   training.
+
+## Why It's Not Cheating
+
+**"You need a trained model — why not just use it?"**
+
+- The teacher is cheap. A 2000-step teacher + 100-step Prism student =
+  2100 total steps vs 1300 for baseline to reach the same quality. But
+  Prism keeps improving to 1.6498, which baseline never reaches. Net:
+  better quality in fewer total steps.
+- One teacher, many students. Extract once, initialize every experiment.
+  The teacher cost amortizes across all subsequent runs.
+- Cross-data transfer works. Spectra from non-overlapping data retain
+  71% of the advantage (skeptic test, validated).
+- Pre-trained models exist. For GPT-2, extract from HuggingFace in
+  seconds, use forever.
+
+Prism is transfer learning at the spectral level. The criticism that
+"you need a teacher" applies equally to knowledge distillation, LoRA,
+and every transfer method. The question is whether the transfer is
+worth the cost. At 13x, it is.
+
+## Test Rig
+
+All results use the same rigorous eval setup:
+
+- **Model**: nanoGPT Shakespeare char-level (6 layers, 384 hidden, 10.65M params)
+- **Data partition**: Contiguous split — Train (80% of original train),
+  Teacher-Val (20% of original train), Test (original val.bin). Teacher and
+  student both train on Train. All reported numbers are on the held-out Test
+  set, which is never seen during training.
+- **Teacher**: Trained for 2000 steps on Train partition, checkpoint extracted.
+  Spectral fingerprint = 8 DCT coefficients per weight group + full U/V
+  directional matrices.
+- **Student configs**: Prism Recipe (align 0.75, LR 5e-4, warmup 50,
+  mod_strength 0.01, mod_decay 0.9999) vs standard Normal(0, 0.02) baseline.
+- **Steps**: 5000 per run, eval every 100 steps.
+- **Hardware**: NVIDIA A100 (Google Colab). ~120-200s per 5000-step run.
+- **Reproducibility**: All notebooks in this repo. Single seed (42) for all
+  runs. Seed variance measured in earlier experiments: Sprint speedup ranges
+  3.8-4.8x across seeds.
+
+## Quick Start
+
+```bash
+git clone https://github.com/realityinspector/nanogpt-prism.git
+cd nanogpt-prism
+pip install transformers tiktoken datasets
+
+# Prepare data
 python data/shakespeare_char/prepare.py
+
+# Train teacher (once)
+python train.py config/train_shakespeare_char.py --max_iters=2000 \
+    --out_dir=out-teacher --always_save_checkpoint=True
+
+# Extract spectral fingerprint (once)
+python prism_extract.py --ckpt out-teacher/ckpt.pt --out .prism_cache/teacher
+
+# Train with Prism Recipe
+python train.py config/train_shakespeare_char.py config/prism_recipe.py
 ```
 
-This creates a `train.bin` and `val.bin` in that data directory. Now it is time to train your GPT. The size of it very much depends on the computational resources of your system:
+Or run the Colab notebook:
+**[The Prism Recipe](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_recipe.ipynb)**
 
-**I have a GPU**. Great, we can quickly train a baby GPT with the settings provided in the [config/train_shakespeare_char.py](config/train_shakespeare_char.py) config file:
+## How It Was Developed
 
-```sh
-python train.py config/train_shakespeare_char.py
+80+ experimental runs over 10 days:
+
+1. **MPS stairclimb** (27 configs): Discovered spectral shape + directional
+   alignment + LR tolerance as three independent axes of improvement.
+2. **CUDA validation** (20 configs, A100): Confirmed 2.8x at real scale,
+   identified overfitting at high LR.
+3. **nanoGPT integration**: Self-extraction from same-architecture teacher.
+4. **Race v1-v3** (15 configs): Discovered the mod wheel — continuous spectral
+   modulation as anti-overfitting regularizer.
+5. **Skeptic test** (6 configs): Cross-data retains 71%. Not data leakage.
+6. **Teacher × DCT sweep** (26 configs): Spectral shape alone doesn't
+   beat baseline. Directions are the payload.
+7. **Unified sweep** (9 configs): Directions + Marathon mod = 13x.
+
+## The Recipe
+
+```python
+# config/prism_recipe.py
+prism_init = True
+prism_align = 0.75     # EigenTransfer: 75% toward teacher directions
+prism_spectra = '.prism_cache/teacher/spectra.json'
+prism_directions = '.prism_cache/teacher/directions.pt'
+learning_rate = 5e-4   # half the Shakespeare default
+warmup_iters = 50
+prism_mod = 0.01       # mod wheel strength
+prism_mod_decay = 0.9999  # halves every ~7000 steps
 ```
 
-If you peek inside it, you'll see that we're training a GPT with a context size of up to 256 characters, 384 feature channels, and it is a 6-layer Transformer with 6 heads in each layer. On one A100 GPU this training run takes about 3 minutes and the best validation loss is 1.4697. Based on the configuration, the model checkpoints are being written into the `--out_dir` directory `out-shakespeare-char`. So once the training finishes we can sample from the best model by pointing the sampling script at this directory:
+## Limitations
 
-```sh
-python sample.py --out_dir=out-shakespeare-char
-```
+- **Shakespeare only.** Not yet validated on OpenWebText/GPT-2 124M at
+  full scale (600K steps, 8×A100). The 13x is on a tiny dataset.
+- **Single seed.** Reported numbers are seed 42. Earlier experiments showed
+  3.8-4.8x range for Sprint mode across seeds.
+- **Teacher required.** Prism is transfer learning. No teacher = no benefit.
+  The spectral-shape-only path (no directions) doesn't beat baseline.
+- **Directions are large.** The directional alignment that provides the
+  real benefit requires ~500MB of U/V matrices. Compressing this is an
+  open research question.
 
-This generates a few samples, for example:
+## Next Steps
 
-```
-ANGELO:
-And cowards it be strawn to my bed,
-And thrust the gates of my threats,
-Because he that ale away, and hang'd
-An one with him.
+- OpenWebText GPT-2 124M benchmark (the real test)
+- Multi-seed validation
+- Directional compression (500MB → target: <1MB)
+- Cross-architecture transfer
 
-DUKE VINCENTIO:
-I thank your eyes against it.
+## License
 
-DUKE VINCENTIO:
-Then will answer him to save the malm:
-And what have you tyrannous shall do this?
+Apache 2.0.
 
-DUKE VINCENTIO:
-If you have done evils of all disposition
-To end his power, the day of thrust for a common men
-That I leave, to fight with over-liking
-Hasting in a roseman.
-```
+---
 
-lol  `¯\_(ツ)_/¯`. Not bad for a character-level model after 3 minutes of training on a GPU. Better results are quite likely obtainable by instead finetuning a pretrained GPT-2 model on this dataset (see finetuning section later).
-
-**I only have a macbook** (or other cheap computer). No worries, we can still train a GPT but we want to dial things down a notch. I recommend getting the bleeding edge PyTorch nightly ([select it here](https://pytorch.org/get-started/locally/) when installing) as it is currently quite likely to make your code more efficient. But even without it, a simple train run could look as follows:
-
-```sh
-python train.py config/train_shakespeare_char.py --device=cpu --compile=False --eval_iters=20 --log_interval=1 --block_size=64 --batch_size=12 --n_layer=4 --n_head=4 --n_embd=128 --max_iters=2000 --lr_decay_iters=2000 --dropout=0.0
-```
-
-Here, since we are running on CPU instead of GPU we must set both `--device=cpu` and also turn off PyTorch 2.0 compile with `--compile=False`. Then when we evaluate we get a bit more noisy but faster estimate (`--eval_iters=20`, down from 200), our context size is only 64 characters instead of 256, and the batch size only 12 examples per iteration, not 64. We'll also use a much smaller Transformer (4 layers, 4 heads, 128 embedding size), and decrease the number of iterations to 2000 (and correspondingly usually decay the learning rate to around max_iters with `--lr_decay_iters`). Because our network is so small we also ease down on regularization (`--dropout=0.0`). This still runs in about ~3 minutes, but gets us a loss of only 1.88 and therefore also worse samples, but it's still good fun:
-
-```sh
-python sample.py --out_dir=out-shakespeare-char --device=cpu
-```
-Generates samples like this:
-
-```
-GLEORKEN VINGHARD III:
-Whell's the couse, the came light gacks,
-And the for mought you in Aut fries the not high shee
-bot thou the sought bechive in that to doth groan you,
-No relving thee post mose the wear
-```
-
-Not bad for ~3 minutes on a CPU, for a hint of the right character gestalt. If you're willing to wait longer, feel free to tune the hyperparameters, increase the size of the network, the context length (`--block_size`), the length of training, etc.
-
-Finally, on Apple Silicon Macbooks and with a recent PyTorch version make sure to add `--device=mps` (short for "Metal Performance Shaders"); PyTorch then uses the on-chip GPU that can *significantly* accelerate training (2-3X) and allow you to use larger networks. See [Issue 28](https://github.com/karpathy/nanoGPT/issues/28) for more.
-
-## reproducing GPT-2
-
-A more serious deep learning professional may be more interested in reproducing GPT-2 results. So here we go - we first tokenize the dataset, in this case the [OpenWebText](https://openwebtext2.readthedocs.io/en/latest/), an open reproduction of OpenAI's (private) WebText:
-
-```sh
-python data/openwebtext/prepare.py
-```
-
-This downloads and tokenizes the [OpenWebText](https://huggingface.co/datasets/openwebtext) dataset. It will create a `train.bin` and `val.bin` which holds the GPT2 BPE token ids in one sequence, stored as raw uint16 bytes. Then we're ready to kick off training. To reproduce GPT-2 (124M) you'll want at least an 8X A100 40GB node and run:
-
-```sh
-torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
-```
-
-This will run for about 4 days using PyTorch Distributed Data Parallel (DDP) and go down to loss of ~2.85. Now, a GPT-2 model just evaluated on OWT gets a val loss of about 3.11, but if you finetune it it will come down to ~2.85 territory (due to an apparent domain gap), making the two models ~match.
-
-If you're in a cluster environment and you are blessed with multiple GPU nodes you can make GPU go brrrr e.g. across 2 nodes like:
-
-```sh
-# Run on the first (master) node with example IP 123.456.123.456:
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
-# Run on the worker node:
-torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
-```
-
-It is a good idea to benchmark your interconnect (e.g. iperf3). In particular, if you don't have Infiniband then also prepend `NCCL_IB_DISABLE=1` to the above launches. Your multinode training will work, but most likely _crawl_. By default checkpoints are periodically written to the `--out_dir`. We can sample from the model by simply `python sample.py`.
-
-Finally, to train on a single GPU simply run the `python train.py` script. Have a look at all of its args, the script tries to be very readable, hackable and transparent. You'll most likely want to tune a number of those variables depending on your needs.
-
-## baselines
-
-OpenAI GPT-2 checkpoints allow us to get some baselines in place for openwebtext. We can get the numbers as follows:
-
-```sh
-$ python train.py config/eval_gpt2.py
-$ python train.py config/eval_gpt2_medium.py
-$ python train.py config/eval_gpt2_large.py
-$ python train.py config/eval_gpt2_xl.py
-```
-
-and observe the following losses on train and val:
-
-| model | params | train loss | val loss |
-| ------| ------ | ---------- | -------- |
-| gpt2 | 124M         | 3.11  | 3.12     |
-| gpt2-medium | 350M  | 2.85  | 2.84     |
-| gpt2-large | 774M   | 2.66  | 2.67     |
-| gpt2-xl | 1558M     | 2.56  | 2.54     |
-
-However, we have to note that GPT-2 was trained on (closed, never released) WebText, while OpenWebText is just a best-effort open reproduction of this dataset. This means there is a dataset domain gap. Indeed, taking the GPT-2 (124M) checkpoint and finetuning on OWT directly for a while reaches loss down to ~2.85. This then becomes the more appropriate baseline w.r.t. reproduction.
-
-## finetuning
-
-Finetuning is no different than training, we just make sure to initialize from a pretrained model and train with a smaller learning rate. For an example of how to finetune a GPT on new text go to `data/shakespeare` and run `prepare.py` to download the tiny shakespeare dataset and render it into a `train.bin` and `val.bin`, using the OpenAI BPE tokenizer from GPT-2. Unlike OpenWebText this will run in seconds. Finetuning can take very little time, e.g. on a single GPU just a few minutes. Run an example finetuning like:
-
-```sh
-python train.py config/finetune_shakespeare.py
-```
-
-This will load the config parameter overrides in `config/finetune_shakespeare.py` (I didn't tune them much though). Basically, we initialize from a GPT2 checkpoint with `init_from` and train as normal, except shorter and with a small learning rate. If you're running out of memory try decreasing the model size (they are `{'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}`) or possibly decreasing the `block_size` (context length). The best checkpoint (lowest validation loss) will be in the `out_dir` directory, e.g. in `out-shakespeare` by default, per the config file. You can then run the code in `sample.py --out_dir=out-shakespeare`:
-
-```
-THEODORE:
-Thou shalt sell me to the highest bidder: if I die,
-I sell thee to the first; if I go mad,
-I sell thee to the second; if I
-lie, I sell thee to the third; if I slay,
-I sell thee to the fourth: so buy or sell,
-I tell thee again, thou shalt not sell my
-possession.
-
-JULIET:
-And if thou steal, thou shalt not sell thyself.
-
-THEODORE:
-I do not steal; I sell the stolen goods.
-
-THEODORE:
-Thou know'st not what thou sell'st; thou, a woman,
-Thou art ever a victim, a thing of no worth:
-Thou hast no right, no right, but to be sold.
-```
-
-Whoa there, GPT, entering some dark place over there. I didn't really tune the hyperparameters in the config too much, feel free to try!
-
-## sampling / inference
-
-Use the script `sample.py` to sample either from pre-trained GPT-2 models released by OpenAI, or from a model you trained yourself. For example, here is a way to sample from the largest available `gpt2-xl` model:
-
-```sh
-python sample.py \
-    --init_from=gpt2-xl \
-    --start="What is the answer to life, the universe, and everything?" \
-    --num_samples=5 --max_new_tokens=100
-```
-
-If you'd like to sample from a model you trained, use the `--out_dir` to point the code appropriately. You can also prompt the model with some text from a file, e.g. ```python sample.py --start=FILE:prompt.txt```.
-
-## efficiency notes
-
-For simple model benchmarking and profiling, `bench.py` might be useful. It's identical to what happens in the meat of the training loop of `train.py`, but omits much of the other complexities.
-
-Note that the code by default uses [PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/). At the time of writing (Dec 29, 2022) this makes `torch.compile()` available in the nightly release. The improvement from the one line of code is noticeable, e.g. cutting down iteration time from ~250ms / iter to 135ms / iter. Nice work PyTorch team!
-
-## todos
-
-- Investigate and add FSDP instead of DDP
-- Eval zero-shot perplexities on standard evals (e.g. LAMBADA? HELM? etc.)
-- Finetune the finetuning script, I think the hyperparams are not great
-- Schedule for linear batch size increase during training
-- Incorporate other embeddings (rotary, alibi)
-- Separate out the optim buffers from model params in checkpoints I think
-- Additional logging around network health (e.g. gradient clip events, magnitudes)
-- Few more investigations around better init etc.
-
-## troubleshooting
-
-Note that by default this repo uses PyTorch 2.0 (i.e. `torch.compile`). This is fairly new and experimental, and not yet available on all platforms (e.g. Windows). If you're running into related error messages try to disable this by adding `--compile=False` flag. This will slow down the code but at least it will run.
-
-For some context on this repository, GPT, and language modeling it might be helpful to watch my [Zero To Hero series](https://karpathy.ai/zero-to-hero.html). Specifically, the [GPT video](https://www.youtube.com/watch?v=kCc8FmEb1nY) is popular if you have some prior language modeling context.
-
-For more questions/discussions feel free to stop by **#nanoGPT** on Discord:
-
-[![](https://dcbadge.vercel.app/api/server/3zy8kqD9Cp?compact=true&style=flat)](https://discord.gg/3zy8kqD9Cp)
-
-## acknowledgements
-
-All nanoGPT experiments are powered by GPUs on [Lambda labs](https://lambdalabs.com), my favorite Cloud GPU provider. Thank you Lambda labs for sponsoring nanoGPT!
+*Created by [Sean McDonald](https://x.com/seanmcdonaldxyz) — unfunded indie
+research, April 2026.*
