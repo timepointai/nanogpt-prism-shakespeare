@@ -59,12 +59,30 @@ in each weight type (attention, FFN up, FFN down, embedding).
 speedup** on CUDA at real scale (A100, batch 64, seq 1024, GPT-2 124M).
 Validated across multiple runs.
 
-To put 332,000:1 in context: JPEG compresses images at ~10:1. MP3
+**Caveat: 128 bytes is a default, not a proven optimum.** The 8 DCT
+coefficients per group was an arbitrary choice made early in the project.
+Analysis showed n_dct=8 gives r>0.93 correlation with actual sorted
+singular values, but n_dct=4 still gives r>0.86, and n_dct=16 showed
+diminishing returns (n_dct=32 actually degraded for some groups due to
+overfitting the cosine basis to noise in the averaged spectrum). The true
+minimum might be **32 bytes** (n_dct=4, r>0.86) and the optimum might be
+**256 bytes** (n_dct=16, r>0.96). We haven't swept this on nanoGPT yet.
+
+| n_dct | Bytes | Correlation | Status |
+|-------|-------|-------------|--------|
+| 2 | 32 B | r > 0.86 | untested on nanoGPT |
+| 4 | 64 B | r > 0.90 | untested on nanoGPT |
+| **8** | **128 B** | **r > 0.93** | **current default** |
+| 16 | 256 B | r > 0.96 | diminishing returns |
+| 32 | 512 B | r > 0.96 | overfits noise |
+
+To put the compression in context: JPEG compresses images at ~10:1. MP3
 compresses audio at ~11:1. Prism compresses the useful spectral structure
-of a neural network at 332,000:1. The reason this works: trained weight
-spectra are extremely smooth (most singular values follow a predictable
-decay curve). The DCT basis captures this smoothness with very few
-coefficients, just as it captures smooth image gradients in JPEG.
+of a neural network at 332,000:1 (potentially 665,000:1 at n_dct=4). The
+reason this works: trained weight spectra are extremely smooth (most
+singular values follow a predictable decay curve). The DCT basis captures
+this smoothness with very few coefficients, just as it captures smooth
+image gradients in JPEG.
 
 ### Tier 2: + Directional Alignment — ~500 MB (expansion)
 
