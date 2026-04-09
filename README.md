@@ -1,10 +1,17 @@
 # Prism
 
-**13x faster convergence. Better final quality. Zero overfitting.**
+**Transfer learning at the spectral level.**
 
-Prism accelerates neural network training from scratch by transferring the
-spectral fingerprint of a trained model's weight structure to a fresh
-initialization.
+Train a model once. Extract its spectral fingerprint. Train again 13x faster.
+
+Prism is a new form of transfer learning that operates on the SVD structure
+of weight matrices — not the weights themselves. It transfers *how* a model
+organizes its parameters (which directions matter, how energy is distributed)
+without transferring *what* it learned (specific token relationships, memorized
+content). The result: a fresh model that converges 13x faster to baseline
+quality, then surpasses it without overfitting.
+
+*Validated on nanoGPT Shakespeare. Untested at scale.*
 
 **[Run the eval in Colab →](https://colab.research.google.com/github/realityinspector/nanogpt-prism/blob/master/nanogpt_prism_eval.ipynb)** One cell. One number. Reproducible.
 
