@@ -10,3 +10,6 @@ __pycache__/
 input.txt
 env/
 venv/
+HANDOFF.md
+MARKETING_PLAN.md
+.prism_cache/
