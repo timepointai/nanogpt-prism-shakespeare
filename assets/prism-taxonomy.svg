@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" role="img" aria-label="Transfer learning taxonomy from random init to distillation, with Prism positioned between random init and LoRA as structure-only transfer.">
+  <rect width="880" height="300" rx="14" fill="#0b1220"/>
+
+  <text x="32" y="44" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="20" font-weight="600" fill="#e2e8f0">Where it would sit</text>
+  <text x="32" y="68" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" fill="#94a3b8">Existing methods move content. Prism proposes moving only structure — the claim that makes it new, and the one that isn't tested.</text>
+
+  <!-- axis -->
+  <line x1="60" y1="150" x2="820" y2="150" stroke="#334155" stroke-width="2"/>
+  <text x="60" y="196" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" fill="#64748b">no knowledge transferred</text>
+  <text x="820" y="196" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" fill="#64748b">full knowledge transferred</text>
+
+  <!-- nodes -->
+  <circle cx="60" cy="150" r="6" fill="#475569"/>
+  <text x="60" y="130" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" fill="#94a3b8">Random init</text>
+
+  <circle cx="250" cy="150" r="9" fill="#2dd4bf"/>
+  <text x="250" y="128" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="600" fill="#2dd4bf">Prism</text>
+  <text x="250" y="228" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" fill="#94a3b8">structure only</text>
+  <text x="250" y="245" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" fill="#64748b">(proposed)</text>
+  <line x1="250" y1="160" x2="250" y2="212" stroke="#2dd4bf" stroke-opacity="0.4" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+  <circle cx="440" cy="150" r="6" fill="#475569"/>
+  <text x="440" y="130" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" fill="#94a3b8">LoRA / adapters</text>
+
+  <circle cx="630" cy="150" r="6" fill="#475569"/>
+  <text x="630" y="130" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" fill="#94a3b8">Fine-tuning</text>
+
+  <circle cx="820" cy="150" r="6" fill="#475569"/>
+  <text x="820" y="130" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="12" fill="#94a3b8">Distillation</text>
+
+  <text x="32" y="284" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11" fill="#64748b">PiSSA, DoRA and mimetic init also read weight structure — they adapt a teacher's parameters. Prism copies no parameters, only geometry. Unverified.</text>
+</svg>
