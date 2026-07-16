@@ -55,6 +55,10 @@ SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SRC_DIR)
 RESULTS_DIR = os.path.join(REPO_ROOT, 'results')
 
+# Generous: an A100 finishes a 5000-step run in minutes, but MPS/CPU take hours
+# and a timeout here kills the run outright. Sized for the slow case.
+TRAIN_TIMEOUT = 24 * 3600
+
 
 def provenance():
     """Record what produced these numbers, so a reader can audit them."""
@@ -155,7 +159,7 @@ def train_teacher(steps, seed, eval_iters, device):
         f'--out_dir=out-eval-teacher-s{seed}',
         '--always_save_checkpoint=True',
         '--compile=False', '--prism_init=False', '--wandb_log=False',
-    ], capture_output=True, text=True, timeout=1800)
+    ], capture_output=True, text=True, timeout=TRAIN_TIMEOUT)
 
     if r.returncode != 0:
         raise RuntimeError(f'Teacher training failed (seed {seed}):\n{r.stderr[-2000:]}')
@@ -188,7 +192,7 @@ def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device):
          f'--eval_iters={eval_iters}', '--log_interval=500',
          f'--out_dir=out-eval-{name}-s{seed}',
          '--wandb_log=False', '--compile=False'] + extra_args,
-        capture_output=True, text=True, timeout=7200
+        capture_output=True, text=True, timeout=TRAIN_TIMEOUT
     )
     wall = time.time() - t0
 
