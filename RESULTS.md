@@ -1,5 +1,33 @@
 # Prism × nanoGPT Results
 
+> **UNREPRODUCED — DO NOT CITE (2026-07-16).**
+>
+> None of the numbers in this file have a committed artifact. Every notebook in
+> `experiments/` was saved without outputs, and every run wrote its curves to
+> ephemeral Colab paths (`/content/alpha_results.json`,
+> `/content/skeptic_curves.json`, `/content/mt_curves.json`) that were never
+> committed and no longer exist. The "80+ training runs" left no trace here.
+>
+> This file also disagrees with [README.md](README.md) and
+> [WHITEPAPER.md](WHITEPAPER.md), which report a 13x score from a run whose
+> baseline (1.7704) is far weaker than the baseline below (1.4636) — and whose
+> Prism result (1.6498) is worse than that baseline. At most one of these
+> describes reality; possibly neither.
+>
+> Known errors in this file, independent of the missing artifacts:
+> - **"Sprint speedup ranges 3.8-4.8x across seeds"** — impossible as written.
+>   `train.py` hardcoded `manual_seed(1337)` and exposed no seed flag, so no run
+>   in this repo's history varied its seed. (Seed is now a config key.)
+> - **The skeptic test is listed "(running)"** here, while README and WHITEPAPER
+>   report its 71% result as settled fact.
+> - **The n_dct prose contradicts its own table** — the text calls n_dct=4
+>   "32 bytes, r>0.86"; the table (correct) has n_dct=2 → 32 B, n_dct=4 → 64 B.
+> - **The CUDA section is WikiText-2, not OpenWebText**, and is scored at step
+>   750, where both arms sit at 200-600 perplexity — i.e. barely trained. An
+>   early-training advantage there does not imply one at convergence.
+>
+> Re-run via `src/prism_eval.py` (multi-seed, writes `results/*.json`).
+
 ## Shakespeare Char-Level (10.65M params, April 2026)
 
 ### Two Modes
@@ -55,9 +83,10 @@ in each weight type (attention, FFN up, FFN down, embedding).
 | Original model | 10.65M params × 4 bytes = **42.6 MB** | 1:1 |
 | Spectral shape | 32 floats × 4 bytes = **128 bytes** | **332,812:1** |
 
-128 bytes. Less than a tweet. This alone provides **~1.4x convergence
-speedup** on CUDA at real scale (A100, batch 64, seq 1024, GPT-2 124M).
-Validated across multiple runs.
+128 bytes. Less than a tweet. This alone was measured at **~1.4x convergence
+speedup** on CUDA (A100, batch 64, seq 1024, GPT-2 124M) — *claimed across
+multiple runs, none of which left a committed artifact. Unverified.* Re-run it
+with `python prism_eval.py --method=spectral_only`.
 
 **Caveat: 128 bytes is a default, not a proven optimum.** The 8 DCT
 coefficients per group was an arbitrary choice made early in the project.

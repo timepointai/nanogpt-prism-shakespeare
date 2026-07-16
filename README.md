@@ -1,27 +1,75 @@
 # Prism
 # PRE RELEASE
-## VALIDATION UNDERWAY
+## CLAIMS UNDER RE-VERIFICATION — DO NOT CITE
 
-**A new transfer learning primitive that eliminates overfitting and makes training cumulative.**
+> **Every number in this repo is suspended pending a re-run (2026-07-16).**
+>
+> The published figures — 13x Prism Score, val losses 1.7704 / 1.6498, 71%
+> cross-data retention — have **no committed artifact backing them**. No
+> notebook here was saved with outputs; every run wrote to ephemeral Colab
+> paths and died with the VM. `RESULTS.md` and `WHITEPAPER.md` report
+> *different* numbers for the same experiment: RESULTS.md has the baseline at
+> **1.4636**, which is better than the whitepaper's headline *Prism* result of
+> **1.6498**. The 71% figure describes a test RESULTS.md itself still lists as
+> "(running)".
+>
+> Known measurement issues, independent of the missing artifacts:
+> - **13x is a resolution artifact.** With eval every 100 steps, "reached
+>   baseline quality at step 100" means "at or before the first eval." 1300/100
+>   is a lower bound, not a measurement.
+> - **The score is a ratio.** The 13x run's baseline (1.7704) is far weaker than
+>   RESULTS.md's baseline (1.4636). A weaker baseline inflates the ratio without
+>   the method improving.
+> - **"Never overfits" is false for Sprint.** RESULTS.md's own table shows Prism
+>   Sprint at 1.690 @5000 — overfit. Only Marathon held.
+> - **Seeds were never varied.** `train.py` hardcoded `manual_seed(1337)` and did
+>   not expose a seed flag; `--seed=42` would have raised `Unknown config key`.
+>   The "seed 42" and "3.8-4.8x across seeds" claims had no mechanism. Seed is
+>   now configurable.
+> - **No regularization-matched control.** The mod wheel is a regularizer, but no
+>   ablation compares it against tuned dropout / weight decay / early stopping.
+>
+> `src/prism_eval.py` has been rebuilt to run multiple seeds and emit auditable
+> artifacts to `results/`. **Cite nothing here until a matching `results/*.json`
+> exists.**
 
-Every trained neural network contains a reusable spectral blueprint — a compact description of *how* it organizes its parameters — that is currently thrown away. Prism extracts that blueprint and injects it into fresh models. The result: models that converge faster, reach better final quality, and never overfit. Not because they train less, but because they can train *longer* without the overfitting ceiling that normally forces you to stop.
+**A transfer learning primitive that aims to suppress overfitting and make training cumulative.**
 
-*Validated on nanoGPT Shakespeare. Scale testing in progress.*
+Every trained neural network contains a spectral structure — a compact description of *how* it organizes its parameters — that is normally discarded. Prism extracts that structure and injects it into fresh models. The hypothesis under test: models that converge faster and keep improving where a baseline would overfit.
 
-**[Run the eval in Colab →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb)** One cell. One number. Reproducible.
+*Method described below. No validated results at this time — see the banner above.*
 
-## Why It Matters
+**[Run the eval in Colab →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb)** Multi-seed. Writes a committable artifact.
 
-**Training becomes cumulative, not disposable.** Right now, when you finish a training run, you get one product: the weights. Prism extracts a second product — the spectral geometry — that accelerates every future training run on the same architecture. The cost of training amortizes. Each run makes the next one cheaper.
+## Why It Would Matter
 
-**Overfitting stops being the ceiling.** The baseline model overfits and collapses by step 3,000. Prism is still improving at step 5,000 — not flat, *still going down*. When overfitting doesn't stop you, you can: train longer to find better solutions, use bigger models on smaller datasets, and skip the regularization hyperparameter search (dropout, weight decay, early stopping) that exists solely to manage overfitting.
+*These are the motivations for the method, not findings. Nothing below is
+established — that is what the re-run is for.*
 
-**Features have more time to emerge.** Complex features — the representations that make models actually good — emerge late in training, after simple features saturate. If the model overfits before they arrive, you never get them. Zero overfitting means the model keeps finding structure long after the baseline has given up.
+**If training became cumulative rather than disposable.** Today a finished
+training run yields one product: the weights. Prism aims to extract a second —
+the spectral geometry — that would accelerate future runs on the same
+architecture, so each run makes the next cheaper.
 
-## The Result
+**If overfitting stopped being the ceiling.** Overfitting is what usually ends
+training. A method that suppressed it would let you train longer, use bigger
+models on smaller datasets, and shrink the regularization search. The open
+question is whether the mod wheel does this any better than tuned dropout and
+weight decay — an ablation nobody has run. Until it exists, the mod wheel is
+simply an unusual regularizer with no demonstrated edge over standard ones.
 
-Tested on nanoGPT Shakespeare (char-level, 10.65M params), evaluated on
-held-out test data with strict partitioning:
+**If late features had time to emerge.** Complex representations tend to appear
+late in training, after simple ones saturate. A model that overfits first never
+gets them. This is the payoff that would justify the method — and the reason the
+result is worth verifying properly rather than asserting.
+
+## The Result — UNVERIFIED, NO ARTIFACT
+
+**The table below has no committed evidence and is contradicted by
+[RESULTS.md](RESULTS.md). It is retained only so the re-run has something to
+compare against. Do not cite it.**
+
+Claimed on nanoGPT Shakespeare (char-level, 10.65M params):
 
 ```
 ┌───────────────┬──────────────┬────────────────────┐
@@ -42,7 +90,11 @@ held-out test data with strict partitioning:
 └───────────────────────────────────────────────────┘
 ```
 
-The Prism Score (13x) measures convergence speed. But the more important number is the val loss at step 5000: Prism is at 1.6703 and still improving. The baseline is at 2.3613 and getting worse. The gap *widens* with more training. Prism doesn't just start faster — it removes the ceiling.
+*Why this is suspended: the 13x is `1300/100`, where 100 is the first eval step —
+the measurement floor, not a resolved crossing. The baseline here (1.7704) is
+markedly worse than the baseline RESULTS.md reports for the same rig (1.4636),
+and a weaker baseline inflates a ratio without the method improving. Prism's
+1.6498 is itself worse than that 1.4636 baseline.*
 
 ## What Prism Is
 
@@ -55,7 +107,9 @@ Random init → Prism (spectral prior) → LoRA/adapters → Fine-tuning → Dis
   transferred                                                     transferred
 ```
 
-Existing methods transfer *content* — specific weights, activations, or outputs. Prism transfers only *structure* — which directions in weight space matter and how energy distributes across them. The student learns its own content from scratch. This is why cross-data transfer retains 71% of the advantage: there's no content to leak, only organizational geometry.
+Existing methods transfer *content* — specific weights, activations, or outputs. Prism aims to transfer only *structure* — which directions in weight space matter and how energy distributes across them, leaving the student to learn its own content.
+
+**This structure-not-content claim is currently unsupported.** It rests on the cross-data test, which was never run (see below). In the eval as written, the teacher and student train on the *same* 80% split, so content transfer is not ruled out.
 
 Three ingredients:
 
@@ -74,11 +128,22 @@ Three ingredients:
    structural coherence throughout training. It's the reason overfitting
    disappears.
 
-## What 71% Structural Means
+## The Cross-Data Test — NOT RUN
 
-The cross-data skeptic test extracted a spectral fingerprint from one partition of Shakespeare and applied it to a student training on a completely separate partition. 71% of the convergence advantage was retained.
+**The "71% structural" claim is withdrawn.** It has no source: the string `71`
+does not appear anywhere in `experiments/nanogpt_skeptic.ipynb`, that notebook
+has zero executed cells, its verdict cell reads a `/content/skeptic_curves.json`
+that was never committed, and [RESULTS.md](RESULTS.md) lists the skeptic test as
+"(running)" under both Experiments and Next Steps.
 
-This means roughly 71% of what makes a trained model good is *structural organization* — how it arranges its weight matrices — not the specific data it saw. Every pretrained checkpoint contains this structural prior. It's currently discarded. Prism is the extraction method.
+The test itself is still the right one, and it is the load-bearing experiment for
+this entire method: extract a fingerprint from one partition of Shakespeare,
+train a student on a disjoint partition, and see how much of the advantage
+survives. If most of it survives, the transfer is structural. If it collapses,
+Prism is leaking content and the teacher is doing the work.
+
+Until that runs, nothing here distinguishes spectral transfer from content
+transfer.
 
 ## Unexplored Headroom
 
@@ -91,7 +156,7 @@ The current recipe (0.75 alignment, 0.01 mod, 0.9999 decay) is the first configu
 - Compressed the directional matrices (500MB → target <1MB)
 - Pushed training beyond 5000 steps to find where Prism eventually plateaus
 
-The 13x Prism Score is the floor of this primitive, not the ceiling.
+None of this headroom is worth exploring until the base result is verified.
 
 ## Test Rig
 
@@ -109,9 +174,14 @@ All results use the same rigorous eval setup:
   mod_strength 0.01, mod_decay 0.9999) vs standard Normal(0, 0.02) baseline.
 - **Steps**: 5000 per run, eval every 100 steps.
 - **Hardware**: NVIDIA A100 (Google Colab). ~120-200s per 5000-step run.
-- **Reproducibility**: All notebooks in this repo. Single seed (42) for all
-  runs. Seed variance measured in earlier experiments: Sprint speedup ranges
-  3.8-4.8x across seeds.
+- **Seeds**: Historically **1337 for every run** — `train.py` hardcoded
+  `torch.manual_seed(1337)` and exposed no seed flag, so `--seed=42` would have
+  raised `Unknown config key`. Earlier claims of "seed 42" and "3.8-4.8x across
+  seeds" had no mechanism to produce them. Seed is now a config key; the eval
+  runs 1337/1338/1339 by default.
+- **Reproducibility**: `src/prism_eval.py` writes a full artifact (loss curves,
+  git commit, GPU, seeds) to `results/`. The notebooks in `experiments/` were
+  saved without outputs and are not evidence of anything.
 
 ## Reproduce It
 
@@ -125,8 +195,20 @@ pip install transformers tiktoken datasets
 python prism_eval.py
 ```
 
-This trains a teacher, extracts the spectral fingerprint, runs baseline
-and Prism, and prints the Prism Score. ~6 min on A100, ~20 min on T4.
+For each seed this trains a teacher, extracts the spectral fingerprint, runs
+baseline and Prism, and scores them. It writes a full artifact — loss curves,
+git commit, GPU, seeds — to `results/`, and prints a median and range across
+seeds. Defaults to seeds 1337/1338/1339: roughly 45-60 min on an A100.
+
+```bash
+python prism_eval.py --seeds=1337              # single seed, fast, NOT publishable
+python prism_eval.py --method=spectral_only    # ablation: 128-byte shape, no directions
+python prism_eval.py --report                  # reprint the last artifact
+```
+
+**Commit the artifact.** A number in a doc without a matching `results/*.json`
+is not a result — that is exactly how this repo ended up with a headline nobody
+can reproduce.
 
 ## The Recipe
 
@@ -146,29 +228,41 @@ prism_mod_decay = 0.9999  # halves every ~7000 steps
 
 ```
 README.md                    ← You are here
-WHITEPAPER.md                ← Full method description and discussion
-RESULTS.md                   ← Detailed findings, compression tiers
-nanogpt_prism_eval.ipynb     ← One-click Colab eval
-config/prism_recipe.py       ← The 8-line winning config
+WHITEPAPER.md                ← Method description (claims suspended)
+RESULTS.md                   ← Earlier findings (unreproduced, conflicts with README)
+nanogpt_prism_eval.ipynb     ← Multi-seed Colab eval; writes a committable artifact
+results/                     ← Eval artifacts. THE evidence. Empty = nothing proven.
+config/prism_recipe.py       ← The 8-line config
 src/
   prism_eval.py              ← Standardized benchmark (produces Prism Score)
   prism_init.py              ← Spectral Imprint + EigenTransfer + Mod Wheel
   prism_extract.py           ← Extract fingerprint from any checkpoint
-  train.py                   ← nanoGPT + 15 lines for Prism
+  train.py                   ← nanoGPT + Prism hooks + configurable seed
   model.py                   ← nanoGPT model (unmodified)
-experiments/                 ← 80+ experimental runs, notebooks, planning docs
+experiments/                 ← Exploratory notebooks, saved WITHOUT outputs (not evidence)
 ```
 
 ## Limitations
 
-- **Shakespeare only.** Not yet validated at production scale. GPT-2 124M on OpenWebText is in progress.
-- **Single seed.** Reported numbers are seed 42. Earlier experiments showed 3.8-4.8x range for Sprint mode across seeds.
-- **Teacher required.** Prism is transfer learning. No teacher = no benefit. The spectral-shape-only path (no directions) is only ~1.4x.
-- **Directions are large.** The directional matrices that provide the real benefit require ~500MB. The 128-byte spectral shape alone is insufficient. Directional compression is an open research question.
+- **No validated results.** Every published number lacks a committed artifact. This is the top limitation and it supersedes the rest.
+- **Nothing was reproduced.** All 15 Prism notebooks have zero executed outputs and wrote to ephemeral Colab paths. The "80+ runs" left no trace in this repo.
+- **Seeds never varied.** See Test Rig. Any claim of seed variance predates the code being able to vary a seed.
+- **Cross-data untested.** The one experiment that would show the transfer is structural rather than content was never run.
+- **No regularization-matched baseline.** The mod wheel is a regularizer. No ablation compares it against tuned dropout / weight decay / early stopping, so there is no evidence it beats standard regularization at its own job.
+- **Shakespeare only.** Char-level, ~1M tokens, 10.65M params. Not validated at production scale.
+- **Teacher required.** Prism is transfer learning. No teacher = no benefit.
+- **The 128-byte headline is not the method.** The GitHub description says "extract 128 bytes, train again 13x faster." Those are different tiers: 128 bytes (spectral shape) is claimed at ~1.4x; the large speedups need ~500MB of directional matrices. The description conflates them and needs fixing.
 
 ## License
 
-Apache 2.0.
+MIT — see [LICENSE](LICENSE).
+
+This is a standalone clone of [nanoGPT](https://github.com/karpathy/nanoGPT) by
+Andrej Karpathy (MIT, © 2022), not a fork. `model.py`, `train.py`,
+`configurator.py`, `bench.py`, `sample.py`, and the `data/` preparers are his
+work; `train.py` carries Prism modifications. The Prism additions
+(`prism_init.py`, `prism_extract.py`, `prism_eval.py`, `config/prism_*.py`) are
+Timepoint Labs' and are released under the same MIT terms.
 
 ---
 

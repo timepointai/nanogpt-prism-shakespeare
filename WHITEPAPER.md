@@ -1,12 +1,38 @@
 # Prism: Transfer Learning at the Spectral Level
 
+> **CLAIMS SUSPENDED — DO NOT CITE (2026-07-16).**
+>
+> No quantitative claim in this paper has a committed artifact behind it. The
+> figures below (13x, 1.7704 / 1.6498 / 2.3613, 71%) appear in no notebook,
+> script, or log in this repository, and [RESULTS.md](RESULTS.md) reports
+> materially different numbers for the same experiment — its baseline (1.4636)
+> beats this paper's headline Prism result (1.6498).
+>
+> Specific corrections pending the re-run:
+> - **§5.1 "All runs use seed 42"** is false. `train.py` hardcoded
+>   `manual_seed(1337)` and exposed no seed flag; `--seed=42` would have raised
+>   `Unknown config key`. Seed is configurable as of this commit.
+> - **§5.4 (71% cross-data)** reports a completed finding for a test RESULTS.md
+>   lists as "(running)". Its setup is also impossible as described: a teacher
+>   fingerprint from "a non-overlapping 80% subset" plus a student on "a separate
+>   80%" cannot both exist — two disjoint 80% subsets do not fit in one dataset.
+> - **§5.5 (teacher sweep, ">10x from a 1000-step teacher")** has no artifact.
+> - **§6 (13x)** is `1300/100`, where 100 is the first eval — a resolution floor,
+>   not a measurement. It is also a ratio against an unusually weak baseline.
+> - **§5.2 ablations** contain no regularization-matched control, so "eliminates
+>   overfitting" is not established against tuned dropout / weight decay.
+> - **§8's "single seed 42 (earlier multi-seed showed 3.8-4.8x)"** is
+>   self-contradictory, and per the code was mechanically impossible.
+>
+> The method description (§4) stands on its own. The results (§5-§6) do not.
+
 ## 1. Abstract
 
-Every trained neural network produces two outputs: the weights (what it learned) and a spectral blueprint (how it organized itself to learn). Current practice discards the blueprint. Prism extracts it and uses it to initialize fresh models that converge faster, reach better final quality, and never overfit — not because they train less, but because overfitting no longer forces them to stop.
+Every trained neural network produces two outputs: the weights (what it learned) and a spectral blueprint (how it organized itself to learn). Current practice discards the blueprint. Prism extracts it and uses it to initialize fresh models. The hypothesis: such models converge faster and continue improving past the point where a baseline overfits — not because they train less, but because overfitting no longer forces them to stop.
 
-Validated end-to-end on nanoGPT Shakespeare (10.65M parameters, character-level): 13x Prism Score (convergence speed), 7% better final loss than the baseline ever achieves, and zero overfitting through 5,000 steps while the baseline collapses by step 3,000. Scale testing on GPT-2 124M / OpenWebText is in progress.
+**Status: unvalidated.** This section previously read "Validated end-to-end on nanoGPT Shakespeare... 13x Prism Score, 7% better final loss, zero overfitting through 5,000 steps." Those figures have no committed artifact and are contradicted by [RESULTS.md](RESULTS.md); they are withdrawn pending the multi-seed re-run described in [results/README.md](results/README.md). What remains below is a method description and a set of open questions.
 
-All claims use a strict held-out test set with no data leakage. The method is untested at production scale.
+The eval trains teacher and student on the same split, so it measures same-data transfer and does not by itself exclude content leakage. The cross-data test that would (§5.4) has not been run. The method is untested at production scale.
 
 ## 2. Introduction
 
