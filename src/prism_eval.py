@@ -331,9 +331,46 @@ def main():
     if len(seeds) == 1:
         print('  WARNING: single seed. Reports one sample, not a result.')
 
+    config = {
+        'method': args.method,
+        'teacher_steps': args.teacher_steps,
+        'student_steps': args.student_steps,
+        'eval_every': args.eval_every,
+        'eval_iters': args.eval_iters,
+        'seeds': seeds,
+        'device': device,
+        'teacher_data_equals_student_data': True,
+    }
+
+    def build(runs, complete):
+        return {
+            'schema': 'prism-eval/1',
+            'partial': not complete,
+            'seeds_requested': seeds,
+            'seeds_done': [r['seed'] for r in runs],
+            'provenance': provenance(),
+            'config': config,
+            'runs': runs,
+            'summary': summarize(runs) if runs else None,
+        }
+
+    # One timestamp for the whole run so every incremental write lands on the
+    # same file — the free-tier GPU can drop at any hour, and a run that dies
+    # after seed 1 must still leave seed 1 on disk (that is how the originals
+    # were lost). latest.json always points at the newest state.
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    path = os.path.join(RESULTS_DIR, f'{args.method}_{stamp}.json')
+
+    def persist(runs, complete):
+        art = build(runs, complete)
+        for f in (path, latest):
+            with open(f, 'w') as fh:
+                json.dump(art, fh, indent=2)
+        return art
+
     runs = []
-    for seed in seeds:
-        print(f'\n--- seed {seed} ---')
+    for i, seed in enumerate(seeds):
+        print(f'\n--- seed {seed} ({i + 1}/{len(seeds)}) ---')
         cache = train_teacher(args.teacher_steps, seed, args.eval_iters, device)
         baseline = run_training('baseline', ['--prism_init=False'], seed,
                                 args.student_steps, args.eval_every,
@@ -347,33 +384,13 @@ def main():
             'method': method,
             'score': compute_score(baseline, method, args.eval_every),
         })
+        persist(runs, complete=(i + 1 == len(seeds)))
+        print(f'  Seed {seed} done and saved. {len(runs)}/{len(seeds)} seeds in '
+              f'results/{os.path.basename(path)}.')
 
-    artifact = {
-        'schema': 'prism-eval/1',
-        'provenance': provenance(),
-        'config': {
-            'method': args.method,
-            'teacher_steps': args.teacher_steps,
-            'student_steps': args.student_steps,
-            'eval_every': args.eval_every,
-            'eval_iters': args.eval_iters,
-            'seeds': seeds,
-            'device': device,
-            'teacher_data_equals_student_data': True,
-        },
-        'runs': runs,
-        'summary': summarize(runs),
-    }
-
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    path = os.path.join(RESULTS_DIR, f'{args.method}_{stamp}.json')
-    for f in (path, latest):
-        with open(f, 'w') as fh:
-            json.dump(artifact, fh, indent=2)
-
+    artifact = persist(runs, complete=True)
     print_report(artifact)
-    print(f'\n  Artifact: results/{os.path.basename(path)}')
-    print(f'  Also written to results/latest.json')
+    print(f'\n  Artifact: results/{os.path.basename(path)} (also latest.json)')
     print(f'  COMMIT THIS FILE — it is the evidence for any claim you publish.')
 
 
