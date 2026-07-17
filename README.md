@@ -134,8 +134,12 @@ python prism_eval.py --device=mps        # cuda | mps | cpu (auto-detected)
 python prism_eval.py --report            # reprint the last artifact
 ```
 
-A GPU matters here: ~45-60 min on an A100 versus roughly 20 hours on Apple
-silicon. Then commit the artifact alongside any claim you make from it.
+Timing (measured): a T4 does ~4 h per seed — teacher ~20 min, then two
+5000-step student runs at ~110 min each — so the default 3-seed run is ~12 h
+there. The model is small enough (10.65M params) that it underutilizes a large
+GPU, so an A100 is faster but not dramatically so; budget a few hours, not
+minutes. Each seed writes its artifact as it finishes, so a dropped runtime
+keeps whatever completed. Commit the artifact alongside any claim you make.
 
 ### Reading a score
 
