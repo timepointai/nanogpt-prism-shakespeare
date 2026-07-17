@@ -14,6 +14,17 @@ Usage:
     python prism_eval.py --teacher_steps=500          # cheaper teacher
     python prism_eval.py --report                     # print the last artifact
 
+Recovery:
+    The run is STEPWISE and RESUMABLE. Each expensive stage (per seed: teacher,
+    baseline, method) is banked to .prism_runs/<run-key>/ the moment it finishes.
+    Re-running the SAME command after a crash or a dropped Colab runtime skips
+    every completed stage and picks up where it stopped — a finished 110-minute
+    baseline is never recomputed. The run key is derived from the experiment
+    config, so changing the experiment starts a fresh run; repeating it resumes.
+
+    Nothing here defends against the VM's disk being wiped (a full Colab factory
+    reset erases /content). Against that, only committing results/*.json helps.
+
 Protocol:
     1. Prepare Shakespeare char-level dataset
     2. Split: Train (80%) / Teacher-Val (20%) / Test (original val)
@@ -54,10 +65,20 @@ import numpy as np
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SRC_DIR)
 RESULTS_DIR = os.path.join(REPO_ROOT, 'results')
+RUNS_DIR = os.path.join(REPO_ROOT, '.prism_runs')
 
 # Generous: an A100 finishes a 5000-step run in minutes, but MPS/CPU take hours
 # and a timeout here kills the run outright. Sized for the slow case.
 TRAIN_TIMEOUT = 24 * 3600
+
+# How often (seconds) to print a "still alive" heartbeat between eval points.
+HEARTBEAT_SEC = 45
+
+
+def log(msg, indent=0):
+    """Timestamped stdout line, flushed so a streamed Colab cell stays live."""
+    ts = datetime.now(timezone.utc).strftime('%H:%M:%S')
+    print(f'{ts}  {" " * indent}{msg}', flush=True)
 
 
 def provenance():
@@ -93,6 +114,7 @@ def setup(workdir=SRC_DIR):
     os.chdir(workdir)
 
     if not os.path.exists('data/shakespeare_char/train.bin'):
+        log('Preparing Shakespeare char dataset (first run only)…', 2)
         subprocess.run([sys.executable, 'data/shakespeare_char/prepare.py'],
                        capture_output=True, check=True)
 
@@ -142,34 +164,76 @@ def default_device():
     return 'cpu'
 
 
-def train_teacher(steps, seed, eval_iters, device):
-    """Train teacher model and extract fingerprint. One teacher per seed."""
+def stream_train(cmd, label, max_step, timeout=TRAIN_TIMEOUT):
+    """Run a training subprocess, echoing progress live so a long run stays
+    auditable. Prints every eval point (with elapsed + ETA) and a throttled
+    heartbeat from the iter log in between. Returns (returncode, full_stdout).
+
+    Live output is the point: on flaky Colab, a silent 110-minute run is
+    indistinguishable from a hung one. This makes the run narrate itself.
+    """
+    t0 = time.time()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+    out = []
+    last_beat = 0.0
+    try:
+        for line in proc.stdout:
+            out.append(line)
+            now = time.time()
+            el = now - t0
+
+            m = re.search(r'step (\d+): train loss ([\d.]+), val loss ([\d.]+)', line)
+            if m:
+                step, vloss = int(m.group(1)), float(m.group(3))
+                eta = (el / step) * (max_step - step) if step else 0.0
+                log(f'[{label}] eval @ step {step:>5}/{max_step}  '
+                    f'val {vloss:.4f}   '
+                    f'{el / 60:.1f}m elapsed · ~{eta / 60:.0f}m left', 4)
+                last_beat = now
+                continue
+
+            h = re.search(r'iter (\d+): loss ([\d.]+), time ([\d.]+)ms', line)
+            if h and now - last_beat >= HEARTBEAT_SEC:
+                log(f'[{label}] … alive, iter {int(h.group(1)):>5}/{max_step}  '
+                    f'({el / 60:.1f}m)', 4)
+                last_beat = now
+
+            if el > timeout:
+                proc.kill()
+                raise RuntimeError(f'{label}: exceeded {timeout}s wall clock, killed.')
+    finally:
+        rc = proc.wait()
+    return rc, ''.join(out)
+
+
+def train_teacher(steps, seed, eval_iters, device, label):
+    """Train teacher model and extract fingerprint. One teacher per seed.
+    Cached by the presence of directions.pt, so a resumed run skips it."""
     cache = f'.prism_cache/eval_teacher_s{seed}'
     if os.path.exists(f'{cache}/directions.pt'):
-        print(f'  Teacher (seed {seed}) cached.')
+        log(f'[resume] teacher (seed {seed}) already trained — using cached '
+            f'fingerprint.', 2)
         return cache
 
-    print(f'  Training teacher (seed {seed}, {steps} steps)...')
-    t0 = time.time()
-    r = subprocess.run([
-        sys.executable, 'train.py', 'config/train_shakespeare_char.py',
+    log(f'Training teacher (seed {seed}, {steps} steps)…', 2)
+    rc, out = stream_train([
+        sys.executable, '-u', 'train.py', 'config/train_shakespeare_char.py',
         '--dataset=shakespeare_teacher', f'--seed={seed}', f'--device={device}',
         f'--max_iters={steps}', f'--eval_interval={steps}',
-        f'--eval_iters={eval_iters}', f'--log_interval={steps}',
+        f'--eval_iters={eval_iters}', '--log_interval=100',
         f'--out_dir=out-eval-teacher-s{seed}',
         '--always_save_checkpoint=True',
         '--compile=False', '--prism_init=False', '--wandb_log=False',
-    ], capture_output=True, text=True, timeout=TRAIN_TIMEOUT)
+    ], f'{label} teacher', steps)
 
-    if r.returncode != 0:
-        raise RuntimeError(f'Teacher training failed (seed {seed}):\n{r.stderr[-2000:]}')
+    if rc != 0:
+        raise RuntimeError(f'Teacher training failed (seed {seed}):\n{out[-2000:]}')
 
-    curve = parse_curve(r.stdout)
+    curve = parse_curve(out)
     if curve:
-        print(f'  Teacher val loss: {list(curve.values())[-1]:.4f} '
-              f'({time.time() - t0:.0f}s)')
-
-    print(f'  Extracting fingerprint...')
+        log(f'teacher val loss {list(curve.values())[-1]:.4f}. Extracting '
+            f'fingerprint…', 2)
     e = subprocess.run([
         sys.executable, 'prism_extract.py',
         '--ckpt', f'out-eval-teacher-s{seed}/ckpt.pt',
@@ -177,32 +241,32 @@ def train_teacher(steps, seed, eval_iters, device):
     ], capture_output=True, text=True, timeout=300)
     if e.returncode != 0:
         raise RuntimeError(f'Fingerprint extraction failed:\n{e.stderr[-2000:]}')
+    log(f'fingerprint saved to {cache}.', 2)
 
     return cache
 
 
-def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device):
+def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device, label):
     """Run one training config. Raises on failure — never scores a partial run."""
-    print(f'  Running {name} (seed {seed})...')
+    log(f'Running {name} (seed {seed}, {steps} steps, eval every {eval_every})…', 2)
     t0 = time.time()
-    r = subprocess.run(
-        [sys.executable, 'train.py', 'config/train_shakespeare_char.py',
+    rc, out = stream_train(
+        [sys.executable, '-u', 'train.py', 'config/train_shakespeare_char.py',
          '--dataset=shakespeare_eval', f'--seed={seed}', f'--device={device}',
          f'--max_iters={steps}', f'--eval_interval={eval_every}',
-         f'--eval_iters={eval_iters}', '--log_interval=500',
+         f'--eval_iters={eval_iters}', '--log_interval=100',
          f'--out_dir=out-eval-{name}-s{seed}',
          '--wandb_log=False', '--compile=False'] + extra_args,
-        capture_output=True, text=True, timeout=TRAIN_TIMEOUT
-    )
+        f'{label} {name}', steps)
     wall = time.time() - t0
 
-    if r.returncode != 0:
-        raise RuntimeError(f'Training failed ({name}, seed {seed}):\n{r.stderr[-2000:]}')
+    if rc != 0:
+        raise RuntimeError(f'Training failed ({name}, seed {seed}):\n{out[-2000:]}')
 
-    curve = parse_curve(r.stdout)
+    curve = parse_curve(out)
     if not curve:
         raise RuntimeError(f'No eval lines parsed ({name}, seed {seed}). '
-                           f'stdout tail:\n{r.stdout[-1000:]}')
+                           f'stdout tail:\n{out[-1000:]}')
     if max(curve) < steps:
         raise RuntimeError(f'Run truncated ({name}, seed {seed}): last eval at '
                            f'step {max(curve)}, expected {steps}. Refusing to '
@@ -211,7 +275,8 @@ def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device):
     best = min(curve.values())
     best_step = min(curve, key=curve.get)
     at_end = curve[max(curve)]
-    print(f'  {name}: best={best:.4f} @{best_step}, @{steps}={at_end:.4f}, {wall:.0f}s')
+    log(f'{name} done: best={best:.4f} @{best_step}, @{steps}={at_end:.4f}, '
+        f'{wall / 60:.1f}m', 2)
 
     return {
         'curve': {str(k): v for k, v in sorted(curve.items())},
@@ -293,6 +358,72 @@ def summarize(runs):
     }
 
 
+# ---------------------------------------------------------------------------
+# Resume machinery: a run key, a stale-lock guard, and a per-stage disk cache.
+# ---------------------------------------------------------------------------
+
+def run_key(config):
+    """A stable, human-readable id for this experiment. Same command → same key
+    → resumes; different experiment → different key → fresh run. Device is
+    excluded on purpose so a run can resume on a different accelerator."""
+    seeds = '-'.join(str(s) for s in config['seeds'])
+    return (f"{config['method']}_t{config['teacher_steps']}"
+            f"_s{config['student_steps']}_e{config['eval_every']}"
+            f"_i{config['eval_iters']}_seeds{seeds}")
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def acquire_lock(run_dir):
+    """Refuse to start if a live prism_eval owns this run dir; take over a stale
+    lock left by a crashed/killed run. Prevents two evals racing the same
+    stages while still allowing a clean resume after a hard kill."""
+    lock = os.path.join(run_dir, 'lock.json')
+    if os.path.exists(lock):
+        try:
+            info = json.load(open(lock))
+        except Exception:
+            info = {}
+        pid = info.get('pid')
+        if pid and _pid_alive(pid):
+            raise SystemExit(
+                f'\nAnother prism_eval is already running for this config '
+                f'(pid {pid}, started {info.get("started")}).\n'
+                f'If that is wrong (e.g. the process was force-killed), delete\n'
+                f'  {lock}\nand run again.')
+        log(f'[resume] found a stale lock (pid {pid}) — previous run did not '
+            f'exit cleanly. Taking over.', 2)
+    with open(lock, 'w') as f:
+        json.dump({'pid': os.getpid(),
+                   'started': datetime.now(timezone.utc).isoformat()}, f)
+    return lock
+
+
+def cached_stage(run_dir, key, fn):
+    """Run fn() once and bank its dict to disk; on a resumed run return the
+    banked result instantly instead of recomputing. This is what turns a
+    dropped runtime from 'redo everything' into 'redo the stage in flight'."""
+    path = os.path.join(run_dir, key + '.json')
+    if os.path.exists(path):
+        try:
+            r = json.load(open(path))
+            log(f'[resume] stage "{key}" already complete — loaded from disk '
+                f'(best {r.get("best", float("nan")):.4f}).', 2)
+            return r
+        except Exception:
+            log(f'[resume] stage "{key}" cache unreadable — recomputing.', 2)
+    r = fn()
+    with open(path, 'w') as f:
+        json.dump(r, f, indent=2)
+    return r
+
+
 def main():
     p = argparse.ArgumentParser(description='Prism Eval — standardized benchmark')
     p.add_argument('--teacher_steps', type=int, default=2000)
@@ -322,15 +453,6 @@ def main():
 
     seeds = [int(s) for s in args.seeds.split(',') if s.strip()]
 
-    print('=' * 60)
-    print('  PRISM EVAL')
-    print('=' * 60)
-    n_train, n_test = setup()
-    print(f'  Train: {n_train:,} tokens | Test: {n_test:,} tokens')
-    print(f'  Seeds: {seeds} | Method: {args.method} | Device: {device}')
-    if len(seeds) == 1:
-        print('  WARNING: single seed. Reports one sample, not a result.')
-
     config = {
         'method': args.method,
         'teacher_steps': args.teacher_steps,
@@ -342,56 +464,114 @@ def main():
         'teacher_data_equals_student_data': True,
     }
 
-    def build(runs, complete):
-        return {
-            'schema': 'prism-eval/1',
-            'partial': not complete,
-            'seeds_requested': seeds,
-            'seeds_done': [r['seed'] for r in runs],
-            'provenance': provenance(),
-            'config': config,
-            'runs': runs,
-            'summary': summarize(runs) if runs else None,
-        }
+    key = run_key(config)
+    run_dir = os.path.join(RUNS_DIR, key)
+    os.makedirs(run_dir, exist_ok=True)
 
-    # One timestamp for the whole run so every incremental write lands on the
-    # same file — the free-tier GPU can drop at any hour, and a run that dies
-    # after seed 1 must still leave seed 1 on disk (that is how the originals
-    # were lost). latest.json always points at the newest state.
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    print('=' * 64)
+    log('PRISM EVAL')
+    print('=' * 64)
+
+    # Reuse the run's original timestamp so every resume writes the SAME
+    # results file instead of littering orphans; store it beside the stages.
+    meta_path = os.path.join(run_dir, 'meta.json')
+    if os.path.exists(meta_path):
+        meta = json.load(open(meta_path))
+        log(f'[resume] existing run for this config, started '
+            f'{meta["started_utc"]}.', 2)
+    else:
+        meta = {'stamp': datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'),
+                'started_utc': datetime.now(timezone.utc).isoformat()}
+        with open(meta_path, 'w') as f:
+            json.dump(meta, f, indent=2)
+    stamp = meta['stamp']
     path = os.path.join(RESULTS_DIR, f'{args.method}_{stamp}.json')
 
-    def persist(runs, complete):
-        art = build(runs, complete)
-        for f in (path, latest):
-            with open(f, 'w') as fh:
-                json.dump(art, fh, indent=2)
-        return art
+    # Report what is already banked, so a resume tells you exactly where it is.
+    total_stages = len(seeds) * 3
+    done = [f for f in os.listdir(run_dir) if f.endswith('.json')
+            and f not in ('meta.json', 'lock.json')]
+    log(f'Run key: {key}', 2)
+    log(f'Work dir: .prism_runs/{key}/  ({len(done)}/{total_stages} stages '
+        f'already banked)', 2)
 
-    runs = []
-    for i, seed in enumerate(seeds):
-        print(f'\n--- seed {seed} ({i + 1}/{len(seeds)}) ---')
-        cache = train_teacher(args.teacher_steps, seed, args.eval_iters, device)
-        baseline = run_training('baseline', ['--prism_init=False'], seed,
-                                args.student_steps, args.eval_every,
-                                args.eval_iters, device)
-        method = run_training(args.method, method_args_for(args.method, cache), seed,
-                              args.student_steps, args.eval_every,
-                              args.eval_iters, device)
-        runs.append({
-            'seed': seed,
-            'baseline': baseline,
-            'method': method,
-            'score': compute_score(baseline, method, args.eval_every),
-        })
-        persist(runs, complete=(i + 1 == len(seeds)))
-        print(f'  Seed {seed} done and saved. {len(runs)}/{len(seeds)} seeds in '
-              f'results/{os.path.basename(path)}.')
+    lock = acquire_lock(run_dir)
+    try:
+        n_train, n_test = setup()
+        log(f'Train: {n_train:,} tokens | Test: {n_test:,} tokens', 2)
+        log(f'Seeds: {seeds} | Method: {args.method} | Device: {device}', 2)
+        if len(seeds) == 1:
+            log('WARNING: single seed. Reports one sample, not a result.', 2)
 
-    artifact = persist(runs, complete=True)
-    print_report(artifact)
-    print(f'\n  Artifact: results/{os.path.basename(path)} (also latest.json)')
-    print(f'  COMMIT THIS FILE — it is the evidence for any claim you publish.')
+        def build(runs, complete):
+            return {
+                'schema': 'prism-eval/1',
+                'partial': not complete,
+                'run_key': key,
+                'seeds_requested': seeds,
+                'seeds_done': [r['seed'] for r in runs],
+                'provenance': provenance(),
+                'config': config,
+                'runs': runs,
+                'summary': summarize(runs) if runs else None,
+            }
+
+        def persist(runs, complete):
+            art = build(runs, complete)
+            for f in (path, latest):
+                with open(f, 'w') as fh:
+                    json.dump(art, fh, indent=2)
+            return art
+
+        stage = [0]  # mutable counter for closure-free stage labelling
+
+        def banner(seed, i):
+            print('-' * 64)
+            log(f'SEED {seed}  ({i + 1}/{len(seeds)})', 2)
+
+        runs = []
+        for i, seed in enumerate(seeds):
+            banner(seed, i)
+            lbl = f's{seed}'
+
+            stage[0] += 1
+            log(f'[stage {stage[0]}/{total_stages}] teacher', 2)
+            cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
+                                  device, lbl)
+
+            stage[0] += 1
+            log(f'[stage {stage[0]}/{total_stages}] baseline', 2)
+            baseline = cached_stage(run_dir, f's{seed}_baseline', lambda:
+                run_training('baseline', ['--prism_init=False'], seed,
+                             args.student_steps, args.eval_every,
+                             args.eval_iters, device, lbl))
+
+            stage[0] += 1
+            log(f'[stage {stage[0]}/{total_stages}] {args.method}', 2)
+            method = cached_stage(run_dir, f's{seed}_{args.method}', lambda:
+                run_training(args.method, method_args_for(args.method, cache),
+                             seed, args.student_steps, args.eval_every,
+                             args.eval_iters, device, lbl))
+
+            runs.append({
+                'seed': seed,
+                'baseline': baseline,
+                'method': method,
+                'score': compute_score(baseline, method, args.eval_every),
+            })
+            persist(runs, complete=(i + 1 == len(seeds)))
+            log(f'seed {seed} banked → results/{os.path.basename(path)} '
+                f'({len(runs)}/{len(seeds)} seeds).', 2)
+
+        artifact = persist(runs, complete=True)
+        print_report(artifact)
+        log(f'Artifact: results/{os.path.basename(path)} (also latest.json)', 2)
+        log('COMMIT THIS FILE — it is the evidence for any claim you publish.', 2)
+    finally:
+        try:
+            os.remove(lock)
+        except Exception:
+            pass
 
 
 def print_report(a):
