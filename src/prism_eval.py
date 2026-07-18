@@ -53,6 +53,7 @@ Protocol note (same-data transfer):
 import argparse
 import json
 import os
+import threading
 import re
 import shutil
 import subprocess
@@ -372,36 +373,69 @@ def run_key(config):
             f"_i{config['eval_iters']}_seeds{seeds}")
 
 
-def _pid_alive(pid):
+# A lock is "live" only if its heartbeat is fresher than this. Timestamp-based,
+# NOT pid-based: each cloud run is a fresh container where a pid from another
+# container is meaningless (and low pids like 12 always exist), so pid-liveness
+# gives false "already running" errors. A heartbeat works across containers.
+LOCK_STALE_SEC = 300
+
+
+def _lock_age(info):
+    """Seconds since the lock's heartbeat, or None if it has none (old format)."""
+    hb = info.get('heartbeat')
+    if not hb:
+        return None
     try:
-        os.kill(pid, 0)
-        return True
+        return (datetime.now(timezone.utc)
+                - datetime.fromisoformat(hb)).total_seconds()
     except Exception:
-        return False
+        return None
+
+
+def _write_lock(lock):
+    with open(lock, 'w') as f:
+        json.dump({'pid': os.getpid(),
+                   'heartbeat': datetime.now(timezone.utc).isoformat(),
+                   'started': datetime.now(timezone.utc).isoformat()}, f)
+
+
+def _heartbeat_loop(lock):
+    """Refresh the lock's timestamp so a concurrent run can tell we're alive.
+    On a Volume, the parent's periodic commit is what makes these writes visible
+    to other containers."""
+    while True:
+        time.sleep(60)
+        try:
+            info = json.load(open(lock))
+            info['heartbeat'] = datetime.now(timezone.utc).isoformat()
+            with open(lock, 'w') as f:
+                json.dump(info, f)
+        except Exception:
+            return
 
 
 def acquire_lock(run_dir):
-    """Refuse to start if a live prism_eval owns this run dir; take over a stale
-    lock left by a crashed/killed run. Prevents two evals racing the same
-    stages while still allowing a clean resume after a hard kill."""
+    """Refuse to start only if another run's heartbeat is still fresh; take over
+    any lock that's stale or heartbeat-less (a crashed/killed run, or the old
+    pid-based format). Prevents two evals clobbering the same Volume while always
+    allowing a clean resume after a death."""
     lock = os.path.join(run_dir, 'lock.json')
     if os.path.exists(lock):
         try:
             info = json.load(open(lock))
         except Exception:
             info = {}
-        pid = info.get('pid')
-        if pid and _pid_alive(pid):
+        age = _lock_age(info)
+        if age is not None and age < LOCK_STALE_SEC:
             raise SystemExit(
-                f'\nAnother prism_eval is already running for this config '
-                f'(pid {pid}, started {info.get("started")}).\n'
-                f'If that is wrong (e.g. the process was force-killed), delete\n'
+                f'\nAnother prism_eval is actively running for this config '
+                f'(heartbeat {age:.0f}s ago < {LOCK_STALE_SEC}s).\n'
+                f'If you are certain nothing is running, delete\n'
                 f'  {lock}\nand run again.')
-        log(f'[resume] found a stale lock (pid {pid}) — previous run did not '
-            f'exit cleanly. Taking over.', 2)
-    with open(lock, 'w') as f:
-        json.dump({'pid': os.getpid(),
-                   'started': datetime.now(timezone.utc).isoformat()}, f)
+        why = 'no heartbeat' if age is None else f'heartbeat {age:.0f}s old'
+        log(f'[resume] prior lock is stale ({why}) — taking over.', 2)
+    _write_lock(lock)
+    threading.Thread(target=_heartbeat_loop, args=(lock,), daemon=True).start()
     return lock
 
 

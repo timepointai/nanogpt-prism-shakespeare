@@ -55,6 +55,9 @@ def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int):
     import sys
     import time
 
+    # See the latest committed state (another container may have banked stages).
+    vol.reload()
+
     # Code lives on the Volume so working dirs persist. Fresh clone, else pull.
     if not os.path.exists(REPO):
         print(f"cloning {REPO_URL} → {REPO}", flush=True)
