@@ -1,236 +1,103 @@
-# Prism × nanoGPT Results
+# Prism × nanoGPT — Results
 
-> **UNREPRODUCED — DO NOT CITE (2026-07-16).**
+> **First committed result (2026-07-18).** Every number below comes from one
+> artifact — [`results/recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json)
+> — produced by `src/prism_eval.py` on an NVIDIA L4 (torch 2.13, CUDA) across
+> three seeds (1337, 1338, 1339). It is reproducible from that file.
 >
-> None of the numbers in this file have a committed artifact. Every notebook in
-> `experiments/` was saved without outputs, and every run wrote its curves to
-> ephemeral Colab paths (`/content/alpha_results.json`,
-> `/content/skeptic_curves.json`, `/content/mt_curves.json`) that were never
-> committed and no longer exist. The "80+ training runs" left no trace here.
+> This **supersedes and removes** the earlier tables (an "alpha run" with baseline
+> 1.4636, a WikiText-2 "2.7×", "sprint 3.8–4.8× across seeds", "80+ runs", a
+> "71% cross-data" figure). None had a committed artifact, and several were
+> mechanically impossible — seeds were never varied in the old code, and the
+> cross-data test never ran. They are deleted rather than quarantined.
 >
-> This file also disagrees with [README.md](README.md) and
-> [WHITEPAPER.md](WHITEPAPER.md), which report a 13x score from a run whose
-> baseline (1.7704) is far weaker than the baseline below (1.4636) — and whose
-> Prism result (1.6498) is worse than that baseline. At most one of these
-> describes reality; possibly neither.
->
-> Known errors in this file, independent of the missing artifacts:
-> - **"Sprint speedup ranges 3.8-4.8x across seeds"** — impossible as written.
->   `train.py` hardcoded `manual_seed(1337)` and exposed no seed flag, so no run
->   in this repo's history varied its seed. (Seed is now a config key.)
-> - **The skeptic test is listed "(running)"** here, while README and WHITEPAPER
->   report its 71% result as settled fact.
-> - **The n_dct prose contradicts its own table** — the text calls n_dct=4
->   "32 bytes, r>0.86"; the table (correct) has n_dct=2 → 32 B, n_dct=4 → 64 B.
-> - **The CUDA section is WikiText-2, not OpenWebText**, and is scored at step
->   750, where both arms sit at 200-600 perplexity — i.e. barely trained. An
->   early-training advantage there does not imply one at convergence.
->
-> Re-run via `src/prism_eval.py` (multi-seed, writes `results/*.json`).
+> **Scope:** this is a **same-data** result. Teacher and student train on the same
+> 80% split, so it does not rule out content leakage. The cross-data test that
+> would (below) has not been run.
 
-## Shakespeare Char-Level (10.65M params, April 2026)
+## The result — nanoGPT Shakespeare char-level (10.65M params)
 
-### Two Modes
+Teacher trained 2000 steps; baseline and Prism-recipe students 5000 steps each,
+evaluated every 100 steps on the held-out Shakespeare validation set. Three seeds.
 
-**Prism Sprint** — 3.8-4.8x faster to baseline quality.
+| | Baseline | Prism Recipe |
+|---|---|---|
+| Best val loss (median of 3) | 1.782 | **1.656** |
+| &nbsp;&nbsp;range across seeds | 1.778 – 1.785 | 1.655 – 1.658 |
+| Val loss @ step 5000 | ~2.31 (overfit) | ~1.66 (stable) |
+| Overfits within 5000 steps | **yes — all 3 seeds** | **no — 0 of 3** |
+| Steps to baseline's best quality | — | **≤100 (≥13–14×, lower bound)** |
+
+Per seed:
+
+| seed | baseline best @step | baseline @5000 | recipe best @step | recipe @5000 | Prism Score |
+|---|---|---|---|---|---|
+| 1337 | 1.7783 @1400 | 2.3017 | 1.6577 @5000 | 1.6577 | ≥14× |
+| 1338 | 1.7823 @1300 | 2.3225 | 1.6550 @3900 | 1.6634 | ≥13× |
+| 1339 | 1.7854 @1400 | 2.3008 | 1.6557 @4700 | 1.6656 | ≥14× |
+
+**Three findings, consistent across all three seeds:**
+
+1. **Lower loss (directly measured, not censored).** Prism reaches ~1.656 vs the
+   baseline's best of ~1.782 — about **7% lower** best validation loss, on every seed.
+2. **No overfitting.** The baseline peaks near step 1350 and then degrades to
+   ~2.31 by step 5000 on all three seeds. Prism holds near its best throughout and
+   overfits on none.
+3. **Faster to parity — but a lower bound.** Prism crosses the baseline's *best*
+   loss by the first eval (step 100) on all three seeds, so the Prism Score of
+   13–14× is **left-censored**: the true crossing lies somewhere below step 100 and
+   is not resolved by this eval. Read 13–14× as a floor, not a point estimate.
+
+## Reproduce it
 
 ```bash
-python train.py config/train_shakespeare_char.py config/prism_sprint.py --max_iters=600
+git clone https://github.com/timepointai/nanogpt-prism-shakespeare.git
+cd nanogpt-prism-shakespeare/src
+pip install torch numpy transformers tiktoken datasets
+python prism_eval.py                 # seeds 1337,1338,1339; writes results/*.json
+python prism_eval.py --report        # reprint the last artifact
 ```
 
-**Prism Marathon** — lower val loss than baseline ever achieves, no overfitting.
+The run is stepwise and resumable — each seed's stages bank to disk as they finish
+— and it writes a full artifact (loss curves, git commit, GPU, argv) to `results/`.
+The rule: a number in this file must have a matching `results/*.json`.
 
-```bash
-python train.py config/train_shakespeare_char.py config/prism_marathon.py
-```
+## What is NOT established
 
-Both require a pre-trained teacher model for spectral extraction:
+- **Structure vs. content.** Same-data transfer cannot separate "Prism moved
+  organizational structure" from "the teacher handed over answers." Only the
+  cross-data test can. It is the decisive experiment, and it has not been run.
+- **Anti-overfitting vs. generic regularization.** The mod wheel is a regularizer.
+  It has not been compared against tuned dropout / weight decay / early stopping,
+  so "no overfitting" is not yet attributable to spectral structure specifically.
+- **The exact speedup.** Left-censored (see above). Resolving it needs dense early
+  evaluation (e.g. steps 10 / 25 / 50 / 75).
+- **Scale.** Shakespeare is ~1M characters, 10.65M params. Nothing here has been
+  tested at GPT-2 124M / OpenWebText scale.
 
-```bash
-# Train teacher (once)
-python train.py config/train_shakespeare_char.py --max_iters=2000 --out_dir=out-teacher
-# Extract spectral fingerprint (once)
-python prism_extract.py --ckpt out-teacher/ckpt.pt --out .prism_cache/shakespeare
-```
+## The cross-data test (the one that decides it)
 
-### Results (Alpha Run)
+As run, teacher and student share the 80% training split. To separate structure
+from content, extract the teacher's fingerprint from one half of the data and
+train the student on the disjoint other half. If the advantage survives, the
+transfer is structural — and every checkpoint ever trained holds a reusable prior
+nobody extracted. If it collapses, Prism is distillation with extra steps. That is
+the next run.
 
-| Config | Steps to val 1.46 | Speedup | Best val loss | Best @ step | @5000 |
-|--------|-------------------|---------|---------------|-------------|-------|
-| Baseline | 1,900 | 1.0x | 1.4636 | 1,900 | 1.690 (overfit) |
-| **Prism Sprint** | **500** | **3.8x** | 1.4404 | 1,100 | 1.690 (overfit) |
-| **Prism Marathon** | 1,000 | 1.9x | **1.4149** | 4,000 | **1.430** (stable) |
+## How the method works
 
-Sprint speedup ranges 3.8-4.8x across seeds. Marathon's anti-overfitting
-property is consistent across all runs tested.
+**Spectral Imprint** — SVD each teacher weight matrix, group by type (attention,
+FFN up, FFN down, embedding), average the singular-value distributions per group,
+compress each to 8 DCT coefficients (~128 bytes total), and reshape the student's
+spectrum to match.
 
----
+**EigenTransfer** — blend the student's singular vectors 75% toward the teacher's,
+then re-orthogonalize. The student starts with the teacher's directional scaffolding.
 
-## What Prism Transfers — Compression Tiers
+**Mod Wheel** — after each optimizer step, `W ← (1 − s)·W + s·W_target`, with
+`s = 0.01` decaying by `0.9999` per step. A continuous, zero-storage spectral
+regularizer.
 
-A trained 10.65M-parameter model's useful structural information can be
-compressed to different levels, each providing different value:
-
-### Tier 1: Spectral Shape — 128 bytes (332,000:1 compression)
-
-**32 DCT coefficients** (8 per weight group × 4 groups) encode the average
-singular value distribution across all weight matrices. This captures
-*what the model learned matters* — which subspaces carry the most energy
-in each weight type (attention, FFN up, FFN down, embedding).
-
-| What | Size | Compression ratio |
-|------|------|-------------------|
-| Original model | 10.65M params × 4 bytes = **42.6 MB** | 1:1 |
-| Spectral shape | 32 floats × 4 bytes = **128 bytes** | **332,812:1** |
-
-128 bytes. Less than a tweet. This alone was measured at **~1.4x convergence
-speedup** on CUDA (A100, batch 64, seq 1024, GPT-2 124M) — *claimed across
-multiple runs, none of which left a committed artifact. Unverified.* Re-run it
-with `python prism_eval.py --method=spectral_only`.
-
-**Caveat: 128 bytes is a default, not a proven optimum.** The 8 DCT
-coefficients per group was an arbitrary choice made early in the project.
-Analysis showed n_dct=8 gives r>0.93 correlation with actual sorted
-singular values, but n_dct=4 still gives r>0.86, and n_dct=16 showed
-diminishing returns (n_dct=32 actually degraded for some groups due to
-overfitting the cosine basis to noise in the averaged spectrum). The true
-minimum might be **32 bytes** (n_dct=4, r>0.86) and the optimum might be
-**256 bytes** (n_dct=16, r>0.96). We haven't swept this on nanoGPT yet.
-
-| n_dct | Bytes | Correlation | Status |
-|-------|-------|-------------|--------|
-| 2 | 32 B | r > 0.86 | untested on nanoGPT |
-| 4 | 64 B | r > 0.90 | untested on nanoGPT |
-| **8** | **128 B** | **r > 0.93** | **current default** |
-| 16 | 256 B | r > 0.96 | diminishing returns |
-| 32 | 512 B | r > 0.96 | overfits noise |
-
-To put the compression in context: JPEG compresses images at ~10:1. MP3
-compresses audio at ~11:1. Prism compresses the useful spectral structure
-of a neural network at 332,000:1 (potentially 665,000:1 at n_dct=4). The
-reason this works: trained weight spectra are extremely smooth (most
-singular values follow a predictable decay curve). The DCT basis captures
-this smoothness with very few coefficients, just as it captures smooth
-image gradients in JPEG.
-
-### Tier 2: + Directional Alignment — ~500 MB (expansion)
-
-**Full U and V matrices** from the teacher's SVD store which singular
-vector *directions* matter for each weight matrix. This is NOT compressed
-— it's larger than the original model because it stores full SVD
-decompositions for all 26 weight matrices.
-
-| What | Size | vs original |
-|------|------|-------------|
-| Spectral shape | 128 bytes | 332,000:1 smaller |
-| + Directions | ~500 MB | ~12x larger |
-
-This adds **~2x on top of spectral shape alone** — from 1.4x to 2.8x
-on CUDA. The pretrained singular vectors encode which directions in
-weight space are task-relevant. Without compression, these are expensive
-to store. Compressing the directional information (e.g., low-rank
-approximation of U/V) is an open research question.
-
-### Tier 3: + Mod Wheel — 0 bytes additional
-
-**Continuous spectral modulation** during training requires no additional
-storage. It reuses the spectral targets from Tier 1+2 and adds a single
-training-time operation: after each optimizer step, blend weights toward
-the spectral target with exponentially decaying strength.
-
-| What | Size | vs original |
-|------|------|-------------|
-| Spectral shape | 128 bytes | 332,000:1 smaller |
-| + Directions | ~500 MB | ~12x larger |
-| + Mod wheel | 0 bytes | free |
-
-This is where the Sprint (3.8-4.8x) and Marathon (anti-overfit) results
-come from. The mod wheel transforms Prism from a one-shot initialization
-into a continuous training-time intervention, preventing overfitting
-drift at zero additional storage cost.
-
-### The Compression Insight
-
-The 332,000:1 number is not just a curiosity — it tells us something
-fundamental about neural networks: **the spectral structure of trained
-weights is extraordinarily low-dimensional.** A 10.65M parameter model's
-useful weight structure can be described by 32 numbers because trained
-singular value distributions are smooth, predictable curves. The
-task-specific information lives in the *deviations from random* (the
-Marchenko-Pastur distribution), and those deviations are captured by
-a handful of DCT coefficients.
-
-This suggests that most of the 10.65M parameters are needed for the
-*content* of what the model learns (specific token relationships,
-attention patterns), not for the *structure* of how it learns (which
-subspaces are important). Prism transfers the structure without the
-content — the blueprint without the data.
-
----
-
-## How It Works
-
-### Spectral Imprint
-
-Extract SVD from each weight matrix of a trained model. Group by type
-(attention, FFN up, FFN down, embedding). Average the singular value
-distributions within each group. Compress each to 8 DCT coefficients.
-Apply to a fresh model by reshaping its SVD singular values to match.
-
-### EigenTransfer
-
-Blend the fresh model's right singular vectors (V) and left singular
-vectors (U) 75% toward the teacher's directions. Re-orthogonalize via
-SVD after blending.
-
-### Mod Wheel
-
-After each optimizer step:
-```
-W = (1 - strength) * W + strength * W_spectral_target
-strength *= decay  # per step
-```
-Sprint: strength=0.005, decay=0.999 (halves every ~700 steps)
-Marathon: strength=0.01, decay=0.9999 (halves every ~7000 steps)
-
----
-
-## CUDA Validation (GPT-2 124M, A100)
-
-Tested on WikiText-2 with batch 64, seq 1024 (real pretraining scale):
-
-| Config | val_ppl @250 | @500 | @750 | vs Ortho @750 |
-|--------|-------------|------|------|---------------|
-| Orthogonal baseline | 1,515 | 682 | 610 | 1.0x |
-| Prism (align=0.75, 1.5x LR, spike_skip) | 414 | 234 | **222** | **2.7x** |
-
-20-config sweep validated that alignment strength 0.65-0.75, LR 1.5x,
-and gradient stabilization (spike-skip or clip 0.5) are the optimal
-parameters at CUDA scale.
-
----
-
-## Experiments Run
-
-| Experiment | Configs | Platform | Key finding |
-|------------|---------|----------|-------------|
-| MPS stairclimb | 27 | M1 MacBook | 3.33x (MPS, toy scale) |
-| CUDA sweep | 20 | A100 Colab | 2.7x validated, LR-sensitive |
-| CUDA 2K validation | 1 | A100 Colab | 2.8x at step 750, gnorms rising |
-| nanoGPT race v1 | 3 | A100 Colab | Sprint 4.8x, Taper prevents overfit |
-| nanoGPT race v2 | 5 | A100 Colab | mod_sustained 1.4187 best, never overfits |
-| nanoGPT race v3 | 7 | A100 Colab | ADSR matched marathon, didn't beat it |
-| nanoGPT sprint push | 8 | A100 Colab | Unfolding hurts — fixed targets are better |
-| nanoGPT alpha | 3 | A100 Colab | Sprint 3.8x, Marathon 1.4149 best |
-| nanoGPT skeptic | 6 | A100 Colab | (running) cross-data vs same-data test |
-
-Total: **80+ training runs** across M1 MPS, CUDA A100, and T4.
-
----
-
-## Next Steps
-
-1. **Skeptic test results**: does cross-data extraction work? (running)
-2. **OpenWebText GPT-2 124M**: real nanoGPT benchmark (needs 8×A100)
-3. **Multi-seed validation**: confirm speedup range across seeds
-4. **Directional compression**: can we compress U/V to make Tier 2 small?
+The 128-byte figure is the spectrum only. The directional matrices (U, V) are
+~500 MB uncompressed; compressing them is an open problem, so "128 bytes"
+describes one tier of the method, not the whole thing.

@@ -9,10 +9,13 @@ ends. The next model starts from noise and rediscovers all of it.
 
 Prism is an attempt to keep that second artifact and hand it to the next model.
 
-> **Status: pre-result.** This repo contains a method and a benchmark. It does
-> **not** yet contain a validated result — the numbers it used to publish had no
-> evidence behind them and have been withdrawn. See [Status](#status). What's
-> here is worth your attention only if you find the *question* interesting.
+> **Status: first result, same-data.** Three-seed benchmark now committed
+> ([results/](results/)): Prism reaches **~7% lower** best validation loss than
+> the baseline and **never overfits** where the baseline does, on every seed. But
+> teacher and student share the training split, so this is *same-data* transfer —
+> it does not yet separate structural transfer from content leakage. The
+> experiment that would is described below and has **not** been run. See
+> [Status](#status).
 
 <img src="assets/prism-method.svg" alt="How Prism works: SVD a trained teacher into directions (U, V) and a spectrum (sigma), compress the spectrum to 8 DCT coefficients, inject both into a fresh student, then hold the student toward the spectral target with the mod wheel." width="100%">
 
@@ -82,42 +85,53 @@ answer is worth having, which is the entire reason this repo is public.
 
 ## Status
 
-Nothing quantitative is known. That is a stronger statement than it sounds, and
-it's worth being precise about why.
+There is now one committed result, and it is honest about its own limits.
 
-This repo previously headlined a **13x Prism Score**, val losses of
-**1.7704 / 1.6498**, and **71%** cross-data retention. An audit on 2026-07-16
-found that none of those numbers had a source:
+**What's measured** (three seeds, one artifact:
+[`results/recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json),
+nanoGPT Shakespeare, teacher 2000 steps, students 5000 steps, NVIDIA L4):
 
-- They appear in **no notebook, script, log, or data file** — only in prose.
-- All 15 Prism notebooks were saved with **zero executed outputs**, and every run
-  wrote its curves to ephemeral Colab `/content` paths that no longer exist. The
-  "80+ training runs" left no trace.
-- [RESULTS.md](RESULTS.md) and [WHITEPAPER.md](WHITEPAPER.md) **disagree about
-  the same experiment**: RESULTS.md's baseline (1.4636) is better than the
-  whitepaper's headline *Prism* result (1.6498).
-- The **13x** is `1300/100`, where 100 was the first eval step — a resolution
-  floor, not a measurement. It's also a ratio against an unusually weak baseline,
-  and a weak baseline inflates a ratio for free.
-- The **71%** has no source at all: the figure appears nowhere in the skeptic
-  notebook, whose verdict cell never ran, and RESULTS.md still lists that test as
-  "(running)".
-- **Seeds were never varied.** `train.py` hardcoded `manual_seed(1337)` and
-  exposed no seed flag, so `--seed=42` would have raised `Unknown config key`.
-  The old "seed 42" and "3.8-4.8x across seeds" claims had no mechanism.
+| | Baseline | Prism Recipe |
+|---|---|---|
+| Best val loss (median of 3) | 1.782 | **1.656** — ~7% lower |
+| Val loss @ step 5000 | ~2.31 (overfit) | ~1.66 (stable) |
+| Overfits within 5000 steps | yes — all 3 seeds | no — 0 of 3 |
+| Steps to baseline's best quality | — | ≤100 (**≥13–14×**, lower bound) |
 
-The eval has been rebuilt to make that failure mode structurally impossible:
-seeds are configurable, runs are multi-seed by default, scores are flagged when
-they're left-censored, partial or crashed runs raise instead of being scored, and
-every run writes a full artifact — curves, git commit, GPU, argv — to
+The lower-loss and no-overfitting findings hold on every seed. Full per-seed
+numbers and curves are in [RESULTS.md](RESULTS.md) and the artifact.
+
+**What's *not* settled, and matters more:**
+
+- **This is same-data transfer.** Teacher and student train on the same 80%
+  split, so a win here does not distinguish structural transfer from the teacher
+  leaking content. The [cross-data test](#the-experiment-that-decides-it) is the
+  decisive experiment and has not been run.
+- **The speedup is a lower bound.** Prism crosses the baseline's best loss by the
+  first eval (step 100) on all three seeds, so 13–14× is left-censored — a floor,
+  not a point estimate. Resolving it needs dense early evaluation.
+- **No regularization-matched control.** The mod wheel is a regularizer; it hasn't
+  been compared to tuned dropout / weight decay, so "no overfitting" isn't yet
+  attributable to spectral structure specifically.
+
+**What was withdrawn.** This repo previously headlined a **13x Prism Score**, val
+losses **1.7704 / 1.6498**, and **71%** cross-data retention — none of which had a
+committed artifact (they lived only in prose; every old run wrote to ephemeral
+Colab paths, and seeds were never actually varied). Those numbers are gone. The
+current 13–14× is the same *kind* of left-censored ratio as the old 13x, but now
+it sits on committed curves and is labelled as a lower bound.
+
+**The rule: a number in a doc must have a matching `results/*.json`.** The eval
+enforces it — seeds are configurable, runs are multi-seed and resumable, scores
+are flagged when left-censored, partial or crashed runs raise instead of being
+scored, and every run writes curves + git commit + GPU + argv to
 [`results/`](results/).
-
-**The rule now: a number in a doc must have a matching `results/*.json`.**
-`results/` is currently empty of results. That's the honest state.
 
 ## Run it
 
-**Colab:** [open the eval →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb) — 3 seeds, ~45-60 min on an A100. Downloads an artifact at the end. Save the notebook with outputs.
+**Modal (headless, recommended):** [`prism_modal.py`](prism_modal.py) runs the eval on a rented GPU with nothing to babysit — resumable across preemptions, streams logs, saves the artifact locally. `modal run --detach prism_modal.py`. The committed result was produced this way on an L4 in ~80 min for 3 seeds.
+
+**Colab:** [open the eval →](https://colab.research.google.com/github/timepointai/nanogpt-prism-shakespeare/blob/master/nanogpt_prism_eval.ipynb) — resumable, streams progress, downloads an artifact at the end. Save the notebook with outputs. (Free-tier T4 is slow and disconnects; the notebook is built to survive that, but paid runtime finishes in one sitting.)
 
 **Local:**
 ```bash
@@ -134,12 +148,12 @@ python prism_eval.py --device=mps        # cuda | mps | cpu (auto-detected)
 python prism_eval.py --report            # reprint the last artifact
 ```
 
-Timing (measured): a T4 does ~4 h per seed — teacher ~20 min, then two
-5000-step student runs at ~110 min each — so the default 3-seed run is ~12 h
-there. The model is small enough (10.65M params) that it underutilizes a large
-GPU, so an A100 is faster but not dramatically so; budget a few hours, not
-minutes. Each seed writes its artifact as it finishes, so a dropped runtime
-keeps whatever completed. Commit the artifact alongside any claim you make.
+Timing (measured): on an NVIDIA L4, a seed is ~27 min — teacher ~2.5 min, then
+two 5000-step student runs at ~12 min each — so the default 3-seed run is ~80 min.
+A free-tier T4 is much slower (~4 h/seed) and disconnects. The model is small
+(10.65M params) and can't saturate a big GPU, so an A100/H100 buys little over an
+L4. Each seed writes its artifact as it finishes, so a dropped runtime keeps
+whatever completed. Commit the artifact alongside any claim you make.
 
 ### Reading a score
 
@@ -164,7 +178,8 @@ In order:
 
 ## Limitations
 
-- **No validated results.** This supersedes everything else here.
+- **Same-data only.** The one committed result trains teacher and student on the
+  same split; it does not exclude content leakage. This supersedes everything else.
 - **Cross-data untested** — the load-bearing experiment.
 - **No regularization-matched control**, so the anti-overfitting claim is unearned.
 - **Shakespeare only** — char-level, ~1M tokens, 10.65M params.
@@ -179,7 +194,7 @@ In order:
 README.md                  ← you are here
 WHITEPAPER.md              ← method in full (results sections withdrawn)
 RESULTS.md                 ← earlier findings, unreproduced
-results/                   ← eval artifacts. the evidence. empty = nothing proven
+results/                   ← eval artifacts. the evidence. one committed 3-seed run
 nanogpt_prism_eval.ipynb   ← multi-seed Colab eval, writes a committable artifact
 src/prism_eval.py          ← the benchmark
 src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel

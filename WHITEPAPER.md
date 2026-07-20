@@ -1,36 +1,33 @@
 # Prism: Transfer Learning at the Spectral Level
 
-> **CLAIMS SUSPENDED — DO NOT CITE (2026-07-16).**
+> **Same-data result committed; cross-data test still open (2026-07-18).**
 >
-> No quantitative claim in this paper has a committed artifact behind it. The
-> figures below (13x, 1.7704 / 1.6498 / 2.3613, 71%) appear in no notebook,
-> script, or log in this repository, and [RESULTS.md](RESULTS.md) reports
-> materially different numbers for the same experiment — its baseline (1.4636)
-> beats this paper's headline Prism result (1.6498).
+> §6 now reports a real, three-seed result with a committed artifact
+> ([results/recipe_20260718T002717Z.json](results/recipe_20260718T002717Z.json)):
+> Prism reaches ~7% lower best validation loss than the baseline and does not
+> overfit where the baseline does, on all three seeds. Read it with two caveats
+> that the paper's older prose did not respect:
 >
-> Specific corrections pending the re-run:
-> - **§5.1 "All runs use seed 42"** is false. `train.py` hardcoded
->   `manual_seed(1337)` and exposed no seed flag; `--seed=42` would have raised
->   `Unknown config key`. Seed is configurable as of this commit.
-> - **§5.4 (71% cross-data)** reports a completed finding for a test RESULTS.md
->   lists as "(running)". Its setup is also impossible as described: a teacher
->   fingerprint from "a non-overlapping 80% subset" plus a student on "a separate
->   80%" cannot both exist — two disjoint 80% subsets do not fit in one dataset.
-> - **§5.5 (teacher sweep, ">10x from a 1000-step teacher")** has no artifact.
-> - **§6 (13x)** is `1300/100`, where 100 is the first eval — a resolution floor,
->   not a measurement. It is also a ratio against an unusually weak baseline.
-> - **§5.2 ablations** contain no regularization-matched control, so "eliminates
->   overfitting" is not established against tuned dropout / weight decay.
-> - **§8's "single seed 42 (earlier multi-seed showed 3.8-4.8x)"** is
->   self-contradictory, and per the code was mechanically impossible.
+> - **It is same-data transfer.** Teacher and student share the 80% split, so it
+>   does not by itself separate structural transfer from content leakage. The
+>   cross-data test in §5.4 is the decisive experiment and **has not been run** —
+>   its earlier "71% retained" figure was fabricated and is withdrawn.
+> - **The speedup is left-censored.** Prism crosses the baseline's best loss by
+>   the first eval (step 100) on every seed, so the "13–14×" is a lower bound, not
+>   a measurement — the same resolution-floor caveat that made the old "13x"
+>   meaningless, now stated plainly.
 >
-> The method description (§4) stands on its own. The results (§5-§6) do not.
+> Other sections still describe experiments that were never committed. §5.2's
+> ablation numbers, §5.5's teacher sweep, and the "80+ runs" have **no artifact**
+> and are flagged inline as not-yet-run. Seeds are now configurable (the old code
+> hardcoded `manual_seed(1337)`, so the historical "seed 42 / 3.8–4.8× across
+> seeds" claims were mechanically impossible). The method (§4) stands on its own.
 
 ## 1. Abstract
 
 Every trained neural network produces two outputs: the weights (what it learned) and a spectral blueprint (how it organized itself to learn). Current practice discards the blueprint. Prism extracts it and uses it to initialize fresh models. The hypothesis: such models converge faster and continue improving past the point where a baseline overfits — not because they train less, but because overfitting no longer forces them to stop.
 
-**Status: unvalidated.** This section previously read "Validated end-to-end on nanoGPT Shakespeare... 13x Prism Score, 7% better final loss, zero overfitting through 5,000 steps." Those figures have no committed artifact and are contradicted by [RESULTS.md](RESULTS.md); they are withdrawn pending the multi-seed re-run described in [results/README.md](results/README.md). What remains below is a method description and a set of open questions.
+**Status: first same-data result committed; cross-data pending.** A three-seed run on nanoGPT Shakespeare (§6) shows Prism reaching ~7% lower best validation loss than the baseline with no overfitting through 5,000 steps, reproducible from a committed artifact. The paper's older headline ("Validated... 13x Prism Score, 7% better final loss") had no artifact and is withdrawn; the numbers below are the measured replacements.
 
 The eval trains teacher and student on the same split, so it measures same-data transfer and does not by itself exclude content leakage. The cross-data test that would (§5.4) has not been run. The method is untested at production scale.
 
@@ -107,51 +104,71 @@ prism_mod_decay = 0.9999
 
 ### 5.1 Test rig
 
-nanoGPT Shakespeare (6 layers, 384 hidden size, 10.65 M parameters). Data is strictly partitioned: 80% train split for both teacher and student, 20% held-out teacher-validation, and the original Shakespeare validation set used *only* for final evaluation. Teacher trained 2000 steps; student runs are 5000 steps with evaluation every 100 steps. All runs use seed 42 on A100.
+nanoGPT Shakespeare (6 layers, 384 hidden size, 10.65 M parameters). Data is strictly partitioned: 80% train split for both teacher and student, 20% held-out teacher-validation, and the original Shakespeare validation set used *only* for final evaluation. Teacher trained 2000 steps; student runs are 5000 steps with evaluation every 100 steps. The committed result (§6) ran seeds 1337, 1338, 1339 on an NVIDIA L4; seed is a config key, so the run is reproducible on any device.
 
-### 5.2 Ablations
+### 5.2 Ablations (not yet committed)
 
-Extensive sweeps (80+ runs) isolated each ingredient:
-- Spectral imprint only (~1.4x, no overfitting benefit)
-- Directions (EigenTransfer) only (~2.8x, still overfits)
-- No Mod Wheel (fast convergence, but overfits like baseline)
-- Different alignment strengths (0.25–1.0)
-- Various LR and warmup schedules
-
-The critical finding: **speed and anti-overfitting come from different components.** EigenTransfer provides speed. The Mod Wheel provides anti-overfitting. Combined, they unlock quality the baseline can never reach because it overfits before getting there.
+The design hypothesis is that **speed and anti-overfitting come from different
+components** — EigenTransfer for speed, the Mod Wheel for anti-overfitting — and
+that only the two together reach quality the baseline can't, because it overfits
+first. The eval exposes the ablation arms to test this directly:
+`--method=spectral_only` (spectrum, no directions) and `--method=dirs_only`
+(directions, no mod wheel). **Neither has a committed multi-seed artifact yet**, so
+the per-component attribution above is a hypothesis, not a result. A prior "80+
+runs" sweep left no committed trace and is not cited here.
 
 ### 5.3 The Prism Score
 
 A standardized metric returned by `prism_eval.py`: the ratio of steps the baseline needs to reach its best loss vs. steps Prism needs. This measures convergence speed. But the more consequential metric is final quality at extended training — where Prism's anti-overfitting property allows it to keep improving long after baseline collapses.
 
-### 5.4 Cross-data skeptic test
+### 5.4 Cross-data skeptic test (the decisive experiment — not yet run)
 
-Teacher fingerprint extracted from a non-overlapping 80% subset; student trained on a separate 80%. **71% of the convergence advantage was retained.** This proves the transfer is structural rather than data-specific — roughly 71% of what makes a trained model effective is how it *organizes* its weights, not what data it saw.
+Everything in §6 is same-data: teacher and student share the 80% split, so a win
+there cannot distinguish structural transfer from the teacher leaking content. The
+test that separates them: extract the teacher's fingerprint from one half of the
+training data and train the student on the disjoint other half, where no shared
+content remains. If the advantage survives, the transfer is structural — and every
+pretrained checkpoint holds a reusable prior currently discarded. If it collapses,
+Prism is distillation with extra steps.
 
-This has a broader implication: every pretrained checkpoint in existence contains a reusable structural prior that is currently being discarded.
+This has **not** been run. An earlier draft reported "71% of the advantage
+retained"; that figure had no artifact and is withdrawn. (Its stated setup — two
+disjoint "80% subsets" of one dataset — is also impossible; the real design splits
+the data in half.)
 
-### 5.5 Teacher investment sweep
+### 5.5 Teacher investment sweep (not yet run)
 
-Minimum viable teacher was swept from 500 to 5000 steps; even a 1000-step teacher delivers >10× Prism Score. The teacher cost is low and amortizes across all subsequent runs using the same spectral prior.
+How small a teacher still transfers is an open question — the `--teacher_steps`
+flag sweeps it — but no teacher-size sweep has a committed artifact. The earlier
+">10× from a 1000-step teacher" claim is withdrawn.
 
 ## 6. Results
 
-| Metric                    | Baseline           | Prism Recipe        |
-|---------------------------|--------------------|--------------------|
-| Best validation loss      | 1.7704             | **1.6498**         |
-| Step at best loss         | 1300               | **4800**           |
-| Loss at step 5000         | 2.3613 (collapsed) | **1.6703** (improving) |
-| Overfitting               | Yes (sharp rise)   | **None**           |
-| Steps to baseline quality | 1300               | **100** (**13×**)  |
+Three seeds (1337, 1338, 1339), one committed artifact
+([results/recipe_20260718T002717Z.json](results/recipe_20260718T002717Z.json)):
 
-The numbers that matter most are not the Prism Score but the trajectory:
+| Metric                    | Baseline (median) | Prism Recipe (median) |
+|---------------------------|-------------------|-----------------------|
+| Best validation loss      | 1.782 (1.778–1.785) | **1.656** (1.655–1.658) |
+| Loss at step 5000         | ~2.31 (overfit)   | **~1.66** (stable)    |
+| Overfits within 5000 steps| Yes — all 3 seeds | **No — 0 of 3**       |
+| Steps to baseline's best  | —                 | **≤100 (≥13–14×, lower bound)** |
 
-- At step 1300, the baseline peaks. It will never be this good again.
-- At step 1300, Prism has already been better for 1200 steps and is still improving.
-- At step 5000, the baseline has collapsed to 2.36. Prism is at 1.67 — and the curve is still descending.
-- **Prism has not yet found its ceiling.** We stopped at 5000 steps. How far can it go?
+The two robust, directly-measured findings are the lower floor and the absence of
+overfitting:
 
-The gap between Prism and baseline *widens* with more training. This is the signature of a method that removes a ceiling rather than merely providing a head start.
+- The baseline peaks near step 1350 at ~1.78, then degrades — by step 5000 it has
+  risen to ~2.31 on every seed. That peak is the best it ever gets.
+- Prism reaches ~1.656 and holds; it overfits on none of the three seeds. That is
+  ~7% lower best loss than the baseline ever achieves.
+
+The convergence *speed* is real but only bounded: Prism is already below the
+baseline's best by the first eval at step 100, so the Prism Score (13–14×) is
+left-censored — the true crossing is below step 100 and this eval does not resolve
+it. It is a floor, not a point estimate; dense early evaluation would resolve it.
+
+All of this is same-data (§5.4): it establishes that Prism transfers *something*
+useful on shared data, not yet that what transfers is structure rather than content.
 
 ## 7. Discussion
 
@@ -161,14 +178,14 @@ The gap between Prism and baseline *widens* with more training. This is the sign
 
 **Zero overfitting changes the scaling calculus.** Overfitting is the mechanism that punishes you for having a model too large for your dataset, training too long, or not tuning regularization carefully enough. Remove it, and several constraints relax simultaneously: bigger models become viable on smaller datasets, training length becomes a choice rather than a constraint, and the dropout/weight-decay/early-stopping search space collapses.
 
-**Compression tiers.** 128 bytes (spectral shape via 8 DCT coefficients) → full directional matrices (≈500 MB). The spectral shape alone is insufficient — it provides ~1.4x. The directional alignment provides the real benefit. Directional compression remains an open research question. The primitive gets more practical as compression improves.
+**Compression tiers.** 128 bytes (spectral shape via 8 DCT coefficients) → full directional matrices (≈500 MB). The design intent is that the spectral shape alone is insufficient and the directional alignment carries most of the benefit — but the per-tier ablation (§5.2) has not been committed, so the split of credit between them is unverified. Directional compression remains an open research question. The primitive gets more practical as compression improves.
 
 **The synthesizer metaphor.** Think of the network as a synthesizer. The singular vectors are the oscillator waveforms, the singular-value spectrum is the filter envelope, and the Mod Wheel is the real-time modulator. Prism supplies the preset patch; training only needs to dial the knobs.
 
 ## 8. Limitations
 
-- Validated only on Shakespeare (tiny dataset, ~1M tokens).
-- Results reported for single seed 42 (earlier multi-seed experiments showed 3.8–4.8× speedup range).
+- Measured only on Shakespeare (tiny dataset, ~1M tokens), same-data.
+- The decisive cross-data test (§5.4), a regularization-matched control, and the component ablations (§5.2) are all still unrun — so "no overfitting" is not yet attributable to spectral structure specifically, and the speedup is a lower bound.
 - Requires a teacher checkpoint. It is transfer learning, not magic.
 - Full directional matrices are large (≈500 MB uncompressed for a 10.65M param model).
 - The "128 bytes" headline applies only to spectral shape, which alone is insufficient. The full method requires ~500 MB of directional data.
@@ -176,8 +193,9 @@ The gap between Prism and baseline *widens* with more training. This is the sign
 
 ## 9. Future Work
 
-- **GPT-2 124M on OpenWebText** — the first real test of whether the primitive transfers to production scale. In progress.
-- **Extended training** — Prism hasn't plateaued at 5000 steps. Running to 20K+ to find the actual ceiling.
+- **The cross-data test (§5.4)** — the decisive experiment; structure vs. content. This comes before everything else below.
+- **GPT-2 124M on OpenWebText** — the first real test of whether the primitive transfers to production scale.
+- **Extended training** — Prism had not plateaued at 5000 steps; run longer to find the actual ceiling.
 - **Generational compounding** — does extracting from a Prism-trained model produce a better prior than extracting from the original teacher?
 - **Directional compression** — 500 MB → target <1 MB. Low-rank approximation of U/V.
 - **Adaptive mod wheel** — modulation strength that responds to training dynamics rather than following a fixed decay.
@@ -187,10 +205,10 @@ The gap between Prism and baseline *widens* with more training. This is the sign
 
 Prism is a new transfer learning primitive that operates at the spectral level. By extracting and re-injecting only the *structural prior* encoded in a model's SVD — the directions that matter and the energy that flows through them — it converts each training run into a reusable asset that accelerates all subsequent runs.
 
-The immediate result is 13x faster convergence to baseline quality on nanoGPT Shakespeare. The more important result is what happens after: zero overfitting through 5,000+ steps, reaching a final quality the baseline never achieves at any point. The overfitting ceiling is gone. Training depth becomes a choice.
+The first committed result on nanoGPT Shakespeare, across three seeds: Prism reaches ~7% lower best validation loss than the baseline and does not overfit through 5,000 steps where the baseline does — and it is already below the baseline's best by the first eval (a ≥13–14× lower bound on steps-to-parity). This is same-data transfer; whether what transfers is *structure* rather than *content* is exactly what the cross-data test (§5.4) will decide, and that test has not been run.
 
-The recipe is 8 lines of config. The eval is one cell. The primitive is version 0.1 — alignment strengths are fixed, the mod wheel follows a static decay, directional compression hasn't been attempted, and generational compounding is untested. The 13x is the floor of this method, not the ceiling.
+The recipe is 8 lines of config. The eval is one command and writes a committed artifact. The primitive is early — alignment strengths are fixed, the mod wheel follows a static decay, directional compression hasn't been attempted, ablations and the cross-data test are unrun. What is proven so far is modest and real; what would make it important is the next experiment, not this one.
 
-Code, notebooks, and all 80+ experimental runs: [github.com/timepointai/nanogpt-prism-shakespeare](https://github.com/timepointai/nanogpt-prism-shakespeare)
+Code and committed results: [github.com/timepointai/nanogpt-prism-shakespeare](https://github.com/timepointai/nanogpt-prism-shakespeare)
 
-Train once. Extract the blueprint. Train again — faster, better, and without the ceiling.
+Train once. Extract the blueprint. Train again — and then run the test that tells you whether the blueprint was structure or a leak.
