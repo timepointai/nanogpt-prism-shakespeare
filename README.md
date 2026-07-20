@@ -12,6 +12,8 @@ improving while the baseline overfit and fell apart. Three seeds, same story.
 | Overfits within 5,000 steps | yes — all 3 seeds | **no — 0 of 3** |
 | Steps to the baseline's best quality | ~1,350 | **≤100** |
 
+<img src="assets/prism-result.svg" alt="Validation loss over training, nanoGPT Shakespeare, three seeds (bands = min–max, lines = median), real committed data. The baseline falls to its best of ~1.78 near step 1,400 and then overfits, climbing to ~2.30 by step 5,000. The Prism recipe drops below the baseline's best by step 100 and holds a flat ~1.66 floor through step 5,000, never overfitting. A dashed line marks the baseline's best, which the recipe stays below the entire run." width="100%">
+
 The baseline peaks and then *rots* — its final loss (2.30) is far worse than its
 own best (1.78). The recipe clears the baseline's best by the first checkpoint and
 holds a floor the baseline never reaches at any point in training. **That regime
