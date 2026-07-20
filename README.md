@@ -224,10 +224,24 @@ job, and the endurance run does double duty — it also settles attribution: if 
 matched baseline holds the floor too, the effect was the learning rate; if only the
 recipe holds, the spectral method is doing something real.
 
+The clean way to remove the confound is not a separate control but to run the
+recipe at the baseline's *own* learning rate, so the two arms differ by nothing
+but the spectral flags. The eval supports it directly:
+
+```bash
+python prism_eval.py --method_lr=1e-3 --method_warmup=100   # recipe at baseline's schedule
+python prism_eval.py --baseline_lr=5e-4 --baseline_warmup=50  # + baseline at recipe's LR → full 2×2
+```
+
+If the recipe still holds ~1.66 and doesn't overfit at LR 1e-3 — where the
+baseline collapses — the effect is Prism, not the schedule. If it overfits too,
+the learning rate was doing the work. (One honest limit: a single shared LR is one
+point; the airtight version compares each arm at *its own best* LR, a small sweep.)
+
 After that, in order:
 
-1. **Attribution** — folded into the endurance run above. Nothing else counts until
-   the effect survives with the spectral method as the *only* difference from the
+1. **Attribution** — the matched-schedule run above. Nothing else counts until the
+   effect survives with the spectral method as the *only* difference from the
    baseline.
 2. **Cross-data** — fingerprint from one half of the data, student on the disjoint
    other half. Separates structural transfer from content leakage; only meaningful
