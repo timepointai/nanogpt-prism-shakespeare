@@ -1,35 +1,41 @@
 # Prism: Transfer Learning at the Spectral Level
 
-> **Same-data result committed; cross-data test still open (2026-07-18).**
+> **A reproducible effect, not yet attributed to the method (2026-07-18).**
 >
-> §6 now reports a real, three-seed result with a committed artifact
+> §6 reports a real, three-seed result with a committed artifact
 > ([results/recipe_20260718T002717Z.json](results/recipe_20260718T002717Z.json)):
-> Prism reaches ~7% lower best validation loss than the baseline and does not
-> overfit where the baseline does, on all three seeds. Read it with two caveats
-> that the paper's older prose did not respect:
+> the Prism *recipe* reaches ~7% lower best validation loss than the baseline and
+> does not overfit where the baseline does, on all three seeds. The effect
+> reproduces. What it is caused by does not yet follow, for three reasons the
+> paper's older prose ignored:
 >
-> - **It is same-data transfer.** Teacher and student share the 80% split, so it
->   does not by itself separate structural transfer from content leakage. The
->   cross-data test in §5.4 is the decisive experiment and **has not been run** —
->   its earlier "71% retained" figure was fabricated and is withdrawn.
-> - **The speedup is left-censored.** Prism crosses the baseline's best loss by
->   the first eval (step 100) on every seed, so the "13–14×" is a lower bound, not
->   a measurement — the same resolution-floor caveat that made the old "13x"
->   meaningless, now stated plainly.
+> - **The comparison is confounded.** The recipe is not the baseline plus spectral
+>   transfer alone — it also **halves the learning rate** (1e-3 → 5e-4), shortens
+>   warmup, and adds the mod wheel (a regularizer). The baseline's overfitting is
+>   what too high a learning rate does on a tiny dataset. A schedule-matched control
+>   (`prism_init=False` at LR 5e-4) has **not** been run, so the win may be the
+>   learning rate, not the method. This is the first thing that must be settled.
+> - **Even isolated, it is same-data.** Teacher and student share the 80% split, so
+>   a clean win still would not separate structural transfer from content leakage.
+>   The cross-data test (§5.4) does that, and it **has not been run** — its earlier
+>   "71% retained" figure was fabricated and is withdrawn.
+> - **The speedup is left-censored.** Prism crosses the baseline's best by the first
+>   eval (step 100), so "13–14×" is a lower bound against that same possibly-hobbled
+>   baseline — the resolution-floor caveat that made the old "13x" meaningless.
 >
-> Other sections still describe experiments that were never committed. §5.2's
-> ablation numbers, §5.5's teacher sweep, and the "80+ runs" have **no artifact**
-> and are flagged inline as not-yet-run. Seeds are now configurable (the old code
-> hardcoded `manual_seed(1337)`, so the historical "seed 42 / 3.8–4.8× across
-> seeds" claims were mechanically impossible). The method (§4) stands on its own.
+> Other sections describe experiments never committed: §5.2's ablation numbers,
+> §5.5's teacher sweep, and the "80+ runs" have **no artifact** and are flagged
+> inline as not-yet-run. Seeds are now configurable (the old code hardcoded
+> `manual_seed(1337)`, so the historical "seed 42 / 3.8–4.8× across seeds" claims
+> were mechanically impossible). The method description (§4) stands on its own.
 
 ## 1. Abstract
 
 Every trained neural network produces two outputs: the weights (what it learned) and a spectral blueprint (how it organized itself to learn). Current practice discards the blueprint. Prism extracts it and uses it to initialize fresh models. The hypothesis: such models converge faster and continue improving past the point where a baseline overfits — not because they train less, but because overfitting no longer forces them to stop.
 
-**Status: first same-data result committed; cross-data pending.** A three-seed run on nanoGPT Shakespeare (§6) shows Prism reaching ~7% lower best validation loss than the baseline with no overfitting through 5,000 steps, reproducible from a committed artifact. The paper's older headline ("Validated... 13x Prism Score, 7% better final loss") had no artifact and is withdrawn; the numbers below are the measured replacements.
+**Status: a reproducible effect, not yet attributed to the method.** A three-seed run on nanoGPT Shakespeare (§6) shows the Prism recipe reaching ~7% lower best validation loss than the baseline with no overfitting through 5,000 steps, reproducible from a committed artifact. The paper's older headline ("Validated... 13x Prism Score, 7% better final loss") had no artifact and is withdrawn; the numbers below are the measured replacements.
 
-The eval trains teacher and student on the same split, so it measures same-data transfer and does not by itself exclude content leakage. The cross-data test that would (§5.4) has not been run. The method is untested at production scale.
+But the recipe changes the learning rate (1e-3 → 5e-4) and adds a regularizer on top of the spectral transfer, so the improvement is not yet attributable to the method — a schedule-matched control has not been run (§5.2). And because teacher and student share the split, even a clean result would measure same-data transfer, not structure vs. content; the cross-data test (§5.4) has not been run. The method is also untested at production scale.
 
 ## 2. Introduction
 
@@ -106,16 +112,25 @@ prism_mod_decay = 0.9999
 
 nanoGPT Shakespeare (6 layers, 384 hidden size, 10.65 M parameters). Data is strictly partitioned: 80% train split for both teacher and student, 20% held-out teacher-validation, and the original Shakespeare validation set used *only* for final evaluation. Teacher trained 2000 steps; student runs are 5000 steps with evaluation every 100 steps. The committed result (§6) ran seeds 1337, 1338, 1339 on an NVIDIA L4; seed is a config key, so the run is reproducible on any device.
 
-### 5.2 Ablations (not yet committed)
+**One caveat this rig does not control for.** The baseline uses the config's default learning rate (1e-3); the recipe uses 5e-4 with shorter warmup. So the two arms differ in training schedule *as well as* in the spectral method. Any honest reading of §6 must treat that as a confound until a `prism_init=False` arm is run at the recipe's schedule — see §5.2.
 
-The design hypothesis is that **speed and anti-overfitting come from different
-components** — EigenTransfer for speed, the Mod Wheel for anti-overfitting — and
-that only the two together reach quality the baseline can't, because it overfits
-first. The eval exposes the ablation arms to test this directly:
-`--method=spectral_only` (spectrum, no directions) and `--method=dirs_only`
-(directions, no mod wheel). **Neither has a committed multi-seed artifact yet**, so
-the per-component attribution above is a hypothesis, not a result. A prior "80+
-runs" sweep left no committed trace and is not cited here.
+### 5.2 The control that must come first (not yet run)
+
+Before any per-component story, one control decides whether §6 is a result at all:
+a baseline with `prism_init=False` trained at the recipe's schedule (LR 5e-4,
+warmup 50) instead of the config default (LR 1e-3). If that control also lands
+near ~1.66 and stops overfitting, the §6 improvement was the learning rate and the
+spectral method contributes nothing measurable here. If it still overfits near
+~1.78, the method is doing something on top of the schedule — and only then is it
+worth asking what. **This control has not been run.**
+
+Given a positive control, the design hypothesis is that **speed and anti-overfitting
+come from different components** — EigenTransfer for speed, the Mod Wheel for
+anti-overfitting. The eval exposes the arms to test it: `--method=spectral_only`
+(spectrum, no directions) and `--method=dirs_only` (directions, no mod wheel).
+**Neither has a committed multi-seed artifact yet**, so the per-component
+attribution is a hypothesis, not a result. A prior "80+ runs" sweep left no
+committed trace and is not cited here.
 
 ### 5.3 The Prism Score
 
@@ -159,16 +174,22 @@ overfitting:
 
 - The baseline peaks near step 1350 at ~1.78, then degrades — by step 5000 it has
   risen to ~2.31 on every seed. That peak is the best it ever gets.
-- Prism reaches ~1.656 and holds; it overfits on none of the three seeds. That is
-  ~7% lower best loss than the baseline ever achieves.
+- The recipe reaches ~1.656 and holds; it overfits on none of the three seeds.
+  That is ~7% lower best loss than the baseline ever achieves.
 
 The convergence *speed* is real but only bounded: Prism is already below the
 baseline's best by the first eval at step 100, so the Prism Score (13–14×) is
 left-censored — the true crossing is below step 100 and this eval does not resolve
 it. It is a floor, not a point estimate; dense early evaluation would resolve it.
 
-All of this is same-data (§5.4): it establishes that Prism transfers *something*
-useful on shared data, not yet that what transfers is structure rather than content.
+**Read this table as "recipe config vs. default config," not "Prism vs. no
+Prism."** The recipe also halves the learning rate and adds a regularizer (§5.1),
+so the improvement is not attributed to the spectral method until the
+schedule-matched control (§5.2) is run — the baseline overfitting at LR 1e-3 is
+exactly what an over-high learning rate produces, and a baseline at LR 5e-4 might
+reach this floor on its own. And all of it is same-data (§5.4): at most it shows
+Prism transfers *something* useful on shared data, not that what transfers is
+structure rather than content.
 
 ## 7. Discussion
 
@@ -184,8 +205,9 @@ useful on shared data, not yet that what transfers is structure rather than cont
 
 ## 8. Limitations
 
-- Measured only on Shakespeare (tiny dataset, ~1M tokens), same-data.
-- The decisive cross-data test (§5.4), a regularization-matched control, and the component ablations (§5.2) are all still unrun — so "no overfitting" is not yet attributable to spectral structure specifically, and the speedup is a lower bound.
+- The committed result is not attributed to the method: the recipe changes the learning rate and adds a regularizer versus the baseline, and no schedule-matched control has been run (§5.2). The improvement may be the schedule.
+- Measured only on Shakespeare (tiny dataset, ~1M tokens), same-data — even a clean control would not exclude content leakage (§5.4, unrun).
+- The speedup is a lower bound (left-censored), measured against a possibly LR-hobbled baseline.
 - Requires a teacher checkpoint. It is transfer learning, not magic.
 - Full directional matrices are large (≈500 MB uncompressed for a 10.65M param model).
 - The "128 bytes" headline applies only to spectral shape, which alone is insufficient. The full method requires ~500 MB of directional data.
@@ -193,7 +215,8 @@ useful on shared data, not yet that what transfers is structure rather than cont
 
 ## 9. Future Work
 
-- **The cross-data test (§5.4)** — the decisive experiment; structure vs. content. This comes before everything else below.
+- **The schedule-matched control (§5.2)** — `prism_init=False` at the recipe's learning rate. Decides whether §6 is a result at all. This comes before everything else.
+- **The cross-data test (§5.4)** — the decisive experiment for structure vs. content, once the control is passed.
 - **GPT-2 124M on OpenWebText** — the first real test of whether the primitive transfers to production scale.
 - **Extended training** — Prism had not plateaued at 5000 steps; run longer to find the actual ceiling.
 - **Generational compounding** — does extracting from a Prism-trained model produce a better prior than extracting from the original teacher?
@@ -205,9 +228,9 @@ useful on shared data, not yet that what transfers is structure rather than cont
 
 Prism is a new transfer learning primitive that operates at the spectral level. By extracting and re-injecting only the *structural prior* encoded in a model's SVD — the directions that matter and the energy that flows through them — it converts each training run into a reusable asset that accelerates all subsequent runs.
 
-The first committed result on nanoGPT Shakespeare, across three seeds: Prism reaches ~7% lower best validation loss than the baseline and does not overfit through 5,000 steps where the baseline does — and it is already below the baseline's best by the first eval (a ≥13–14× lower bound on steps-to-parity). This is same-data transfer; whether what transfers is *structure* rather than *content* is exactly what the cross-data test (§5.4) will decide, and that test has not been run.
+The first committed result on nanoGPT Shakespeare, across three seeds: the Prism recipe reaches ~7% lower best validation loss than the baseline and does not overfit through 5,000 steps where the baseline does. That effect is real and reproducible. But it is not yet a result *about the spectral method*: the recipe also halves the learning rate and adds a regularizer, so a schedule-matched control (§5.2) must first rule out that the learning rate alone explains it. Only past that does the deeper question — is the transfer *structural* or is the teacher leaking *content* — become answerable, by the cross-data test (§5.4). Neither control has been run.
 
-The recipe is 8 lines of config. The eval is one command and writes a committed artifact. The primitive is early — alignment strengths are fixed, the mod wheel follows a static decay, directional compression hasn't been attempted, ablations and the cross-data test are unrun. What is proven so far is modest and real; what would make it important is the next experiment, not this one.
+The recipe is 8 lines of config. The eval is one command and writes a committed artifact. The primitive is early — alignment strengths are fixed, the mod wheel follows a static decay, directional compression hasn't been attempted, and the two controls that would give the result meaning are unrun. What is proven so far is narrow: a config that beats the default config. Whether the spectral method is why is the next experiment, not this one.
 
 Code and committed results: [github.com/timepointai/nanogpt-prism-shakespeare](https://github.com/timepointai/nanogpt-prism-shakespeare)
 

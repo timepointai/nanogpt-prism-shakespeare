@@ -1,7 +1,11 @@
 # results/
 
-Eval artifacts. **This directory is the evidence.** It is currently empty of
-results, which is the honest state of this project as of 2026-07-16.
+Eval artifacts. **This directory is the evidence.** It holds one committed run —
+`recipe_20260718T002717Z.json`, three seeds — which shows a reproducible effect
+(the recipe reaching ~7% lower loss with no overfitting) that is **not yet
+attributed to the spectral method**: the recipe also changes the learning rate, so
+a schedule-matched control (`prism_init=False` at LR 5e-4) is still needed to know
+whether Prism causes it. See [RESULTS.md](../RESULTS.md).
 
 Every file here is written by `src/prism_eval.py` and contains, for each seed:
 the full baseline and method loss curves, best loss and step, the Prism Score
@@ -25,7 +29,7 @@ was real.
 
 ```bash
 cd src
-python prism_eval.py                    # seeds 1337,1338,1339 — ~45-60 min on A100
+python prism_eval.py                    # seeds 1337,1338,1339 — ~80 min on an L4
 git add ../results/recipe_*.json        # commit the artifact with the claim
 ```
 
