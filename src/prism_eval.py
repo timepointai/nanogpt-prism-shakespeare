@@ -14,6 +14,12 @@ Usage:
     python prism_eval.py --teacher_steps=500          # cheaper teacher
     python prism_eval.py --report                     # print the last artifact
 
+    # The clean attribution test — recipe at the baseline's schedule, so the
+    # ONLY difference between the two arms is the spectral method (no LR confound):
+    python prism_eval.py --method_lr=1e-3 --method_warmup=100
+    # For the full 2x2, also get the baseline at the recipe's LR:
+    python prism_eval.py --baseline_lr=5e-4 --baseline_warmup=50
+
 Recovery:
     The run is STEPWISE and RESUMABLE. Each expensive stage (per seed: teacher,
     baseline, method) is banked to .prism_runs/<run-key>/ the moment it finishes.
@@ -319,11 +325,11 @@ def compute_score(baseline, method, eval_every):
     }
 
 
-def method_args_for(method, cache):
+def method_args_for(method, cache, lr, warmup):
     common = [
         '--prism_init=True',
         f'--prism_spectra={cache}/spectra.json',
-        '--learning_rate=5e-4', '--warmup_iters=50',
+        f'--learning_rate={lr}', f'--warmup_iters={warmup}',
     ]
     dirs = [f'--prism_directions={cache}/directions.pt']
     return {
@@ -366,11 +372,20 @@ def summarize(runs):
 def run_key(config):
     """A stable, human-readable id for this experiment. Same command → same key
     → resumes; different experiment → different key → fresh run. Device is
-    excluded on purpose so a run can resume on a different accelerator."""
+    excluded on purpose so a run can resume on a different accelerator.
+
+    The student schedule (LRs / warmups) is part of the experiment's identity: a
+    recipe at LR 1e-3 must NOT resume onto a recipe-at-5e-4 result. Non-default
+    schedule knobs are appended so those runs get their own dir."""
     seeds = '-'.join(str(s) for s in config['seeds'])
-    return (f"{config['method']}_t{config['teacher_steps']}"
-            f"_s{config['student_steps']}_e{config['eval_every']}"
-            f"_i{config['eval_iters']}_seeds{seeds}")
+    key = (f"{config['method']}_t{config['teacher_steps']}"
+           f"_s{config['student_steps']}_e{config['eval_every']}"
+           f"_i{config['eval_iters']}_seeds{seeds}")
+    if config.get('method_lr') != '5e-4' or config.get('method_warmup') != 50:
+        key += f"_mlr{config['method_lr']}mw{config['method_warmup']}"
+    if config.get('baseline_lr') or config.get('baseline_warmup') is not None:
+        key += f"_blr{config.get('baseline_lr') or 'def'}bw{config.get('baseline_warmup')}"
+    return key
 
 
 # A lock is "live" only if its heartbeat is fresher than this. Timestamp-based,
@@ -471,6 +486,18 @@ def main():
                    choices=['recipe', 'spectral_only', 'dirs_only', 'sprint', 'marathon'])
     p.add_argument('--device', type=str, default=None,
                    help="cuda | mps | cpu (default: best available)")
+    # Student-schedule knobs. The default recipe lowers the LR vs the baseline,
+    # which confounds "is it Prism or the schedule". To test cleanly, match them:
+    #   --method_lr=1e-3 --method_warmup=100   (recipe at the baseline's schedule)
+    # Then baseline and method differ by NOTHING but the spectral flags.
+    p.add_argument('--method_lr', type=str, default='5e-4',
+                   help="student LR for the Prism arm (default 5e-4; set 1e-3 to match baseline)")
+    p.add_argument('--method_warmup', type=int, default=50,
+                   help="warmup iters for the Prism arm (default 50; set 100 to match baseline)")
+    p.add_argument('--baseline_lr', type=str, default=None,
+                   help="student LR for the baseline arm (default: config's 1e-3)")
+    p.add_argument('--baseline_warmup', type=int, default=None,
+                   help="warmup iters for the baseline arm (default: config's 100)")
     p.add_argument('--report', action='store_true', help='print the last artifact')
     args = p.parse_args()
     device = args.device or default_device()
@@ -496,6 +523,12 @@ def main():
         'seeds': seeds,
         'device': device,
         'teacher_data_equals_student_data': True,
+        'method_lr': args.method_lr,
+        'method_warmup': args.method_warmup,
+        'baseline_lr': args.baseline_lr,
+        'baseline_warmup': args.baseline_warmup,
+        'schedule_matched': (args.method_lr == (args.baseline_lr or '1e-3')
+                             and args.method_warmup == (args.baseline_warmup or 100)),
     }
 
     key = run_key(config)
@@ -534,6 +567,11 @@ def main():
         n_train, n_test = setup()
         log(f'Train: {n_train:,} tokens | Test: {n_test:,} tokens', 2)
         log(f'Seeds: {seeds} | Method: {args.method} | Device: {device}', 2)
+        log(f'Schedule: method LR {args.method_lr}/warmup {args.method_warmup} · '
+            f'baseline LR {args.baseline_lr or "1e-3(config)"}/warmup '
+            f'{args.baseline_warmup if args.baseline_warmup is not None else "100(config)"}'
+            + ('  [MATCHED — only the spectral flags differ]' if config['schedule_matched']
+               else '  [recipe LR differs from baseline — confounded]'), 2)
         if len(seeds) == 1:
             log('WARNING: single seed. Reports one sample, not a result.', 2)
 
@@ -573,17 +611,25 @@ def main():
             cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
                                   device, lbl)
 
+            baseline_extra = ['--prism_init=False']
+            if args.baseline_lr:
+                baseline_extra.append(f'--learning_rate={args.baseline_lr}')
+            if args.baseline_warmup is not None:
+                baseline_extra.append(f'--warmup_iters={args.baseline_warmup}')
+
             stage[0] += 1
             log(f'[stage {stage[0]}/{total_stages}] baseline', 2)
             baseline = cached_stage(run_dir, f's{seed}_baseline', lambda:
-                run_training('baseline', ['--prism_init=False'], seed,
+                run_training('baseline', baseline_extra, seed,
                              args.student_steps, args.eval_every,
                              args.eval_iters, device, lbl))
 
             stage[0] += 1
             log(f'[stage {stage[0]}/{total_stages}] {args.method}', 2)
             method = cached_stage(run_dir, f's{seed}_{args.method}', lambda:
-                run_training(args.method, method_args_for(args.method, cache),
+                run_training(args.method,
+                             method_args_for(args.method, cache,
+                                             args.method_lr, args.method_warmup),
                              seed, args.student_steps, args.eval_every,
                              args.eval_iters, device, lbl))
 

@@ -49,7 +49,8 @@ REPO_URL = "https://github.com/timepointai/nanogpt-prism-shakespeare.git"
 
 
 @app.function(image=image, gpu="L4", volumes={WORK: vol}, timeout=24 * 3600)
-def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int):
+def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int,
+             extra: str = ""):
     import os
     import subprocess
     import sys
@@ -69,12 +70,14 @@ def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int):
 
     # Run the resumable eval as a child; echo its live stream and snapshot the
     # Volume every ~60s so a preemption keeps whatever finished.
+    cmd = [sys.executable, "-u", "prism_eval.py",
+           f"--method={method}", f"--seeds={seeds}",
+           f"--teacher_steps={teacher_steps}",
+           f"--student_steps={student_steps}"]
+    if extra:
+        cmd += extra.split()
     proc = subprocess.Popen(
-        [sys.executable, "-u", "prism_eval.py",
-         f"--method={method}", f"--seeds={seeds}",
-         f"--teacher_steps={teacher_steps}",
-         f"--student_steps={student_steps}"],
-        cwd=f"{REPO}/src", stdout=subprocess.PIPE,
+        cmd, cwd=f"{REPO}/src", stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, bufsize=1,
     )
     last_commit = time.time()
@@ -99,13 +102,16 @@ def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int):
 
 @app.local_entrypoint()
 def main(gpu: str = "L4", method: str = "recipe", seeds: str = "1337,1338,1339",
-         teacher_steps: int = 2000, student_steps: int = 5000):
+         teacher_steps: int = 2000, student_steps: int = 5000, extra: str = ""):
+    # `extra` passes flags straight to prism_eval.py. The clean attribution test —
+    # recipe at the baseline's schedule, so only the spectral flags differ:
+    #   modal run prism_modal.py --extra "--method_lr=1e-3 --method_warmup=100"
     import pathlib
 
     # Bind the requested GPU at call time so --gpu works without editing code.
     result = run_eval.with_options(gpu=gpu).remote(
         method=method, seeds=seeds,
-        teacher_steps=teacher_steps, student_steps=student_steps)
+        teacher_steps=teacher_steps, student_steps=student_steps, extra=extra)
 
     out = pathlib.Path("results")
     out.mkdir(exist_ok=True)
