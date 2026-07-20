@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470" role="img" aria-label="How the spectral imprint is derived: SVD each trained weight matrix, normalize and average the singular values per weight group, then least-squares fit 8 cosine (DCT) coefficients in inverse-softplus space. Those 8 numbers per group — about 128 bytes total — softplus-reconstruct back to the smooth singular-value spectrum, shown overlaid on the original.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="470" rx="14" fill="#0b1220"/>
+
+  <text x="32" y="42" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="20" font-weight="600" fill="#e2e8f0">Deriving the spectral imprint</text>
+  <text x="32" y="66" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="13" fill="#94a3b8">A trained model's singular-value structure, compressed to a handful of numbers per weight group.</text>
+
+  <!-- pipeline -->
+  <g font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">
+    <!-- chip 1 -->
+    <rect x="32" y="100" width="150" height="54" rx="9" fill="#111c31" stroke="#334155"/>
+    <text x="107" y="124" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e2e8f0">Trained teacher</text>
+    <text x="107" y="142" text-anchor="middle" font-size="11" fill="#94a3b8">weight matrices, by group</text>
+    <!-- chip 2 -->
+    <rect x="198" y="100" width="150" height="54" rx="9" fill="#111c31" stroke="#334155"/>
+    <text x="273" y="124" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e2e8f0">SVD each</text>
+    <text x="273" y="142" text-anchor="middle" font-size="11" fill="#94a3b8">W = U &#931; V&#7488;</text>
+    <!-- chip 3 -->
+    <rect x="364" y="100" width="150" height="54" rx="9" fill="#111c31" stroke="#334155"/>
+    <text x="439" y="124" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e2e8f0">Normalize + average</text>
+    <text x="439" y="142" text-anchor="middle" font-size="11" fill="#94a3b8">one spectrum per group</text>
+    <!-- chip 4 -->
+    <rect x="530" y="100" width="150" height="54" rx="9" fill="#111c31" stroke="#334155"/>
+    <text x="605" y="124" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e2e8f0">Fit 8 cosine coeffs</text>
+    <text x="605" y="142" text-anchor="middle" font-size="11" fill="#94a3b8">least squares, DCT basis</text>
+    <!-- chip 5 (output) -->
+    <rect x="696" y="100" width="152" height="54" rx="9" fill="#0f2b2b" stroke="#2dd4bf" stroke-opacity="0.6"/>
+    <text x="772" y="124" text-anchor="middle" font-size="12.5" font-weight="600" fill="#2dd4bf">The imprint</text>
+    <text x="772" y="142" text-anchor="middle" font-size="11" fill="#94a3b8">&#8776;128 bytes total</text>
+
+    <line x1="183" y1="127" x2="197" y2="127" stroke="#64748b" stroke-width="1.5" marker-end="url(#ar)"/>
+    <line x1="349" y1="127" x2="363" y2="127" stroke="#64748b" stroke-width="1.5" marker-end="url(#ar)"/>
+    <line x1="515" y1="127" x2="529" y2="127" stroke="#64748b" stroke-width="1.5" marker-end="url(#ar)"/>
+    <line x1="681" y1="127" x2="695" y2="127" stroke="#64748b" stroke-width="1.5" marker-end="url(#ar)"/>
+  </g>
+
+  <!-- bottom panel: the fidelity visualization -->
+  <rect x="32" y="182" width="816" height="252" rx="10" fill="#0d1526" stroke="#334155"/>
+  <text x="52" y="210" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">Eight numbers reproduce the whole spectrum</text>
+  <text x="52" y="230" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif" font-size="11.5" fill="#94a3b8">The imprint is fit in inverse-softplus space; softplus of the 8-term cosine sum reconstructs the curve.</text>
+
+  <!-- curve plot -->
+  <g font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">
+    <!-- axes -->
+    <line x1="70" y1="258" x2="70" y2="386" stroke="#475569" stroke-width="1"/>
+    <line x1="70" y1="386" x2="430" y2="386" stroke="#475569" stroke-width="1"/>
+    <text x="63" y="263" text-anchor="end" font-size="9.5" fill="#64748b">1.0</text>
+    <text x="63" y="389" text-anchor="end" font-size="9.5" fill="#64748b">0</text>
+    <text x="250" y="405" text-anchor="middle" font-size="10.5" fill="#94a3b8">singular-value rank &#8594;</text>
+    <text x="46" y="322" text-anchor="middle" font-size="10.5" fill="#94a3b8" transform="rotate(-90 46 322)">normalized &#963;</text>
+
+    <!-- original averaged spectrum -->
+    <polyline fill="none" stroke="#93c5fd" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" points="70.0,258.0 75.7,269.4 81.4,278.6 87.1,286.5 92.9,293.5 98.6,299.8 104.3,305.5 110.0,310.8 115.7,315.7 121.4,320.2 127.1,324.4 132.9,328.3 138.6,332.0 144.3,335.4 150.0,338.5 155.7,341.5 161.4,344.2 167.1,346.7 172.9,349.1 178.6,351.3 184.3,353.4 190.0,355.3 195.7,357.1 201.4,358.7 207.1,360.3 212.9,361.7 218.6,363.1 224.3,364.3 230.0,365.5 235.7,366.6 241.4,367.6 247.1,368.5 252.9,369.4 258.6,370.2 264.3,370.9 270.0,371.7 275.7,372.3 281.4,372.9 287.1,373.5 292.9,374.0 298.6,374.5 304.3,375.0 310.0,375.4 315.7,375.8 321.4,376.2 327.1,376.5 332.9,376.8 338.6,377.1 344.3,377.4 350.0,377.7 355.7,377.9 361.4,378.1 367.1,378.3 372.9,378.5 378.6,378.7 384.3,378.9 390.0,379.0 395.7,379.2 401.4,379.3 407.1,379.5 412.9,379.6 418.6,379.7 424.3,379.8 430.0,379.9"/>
+    <!-- 8-coefficient reconstruction -->
+    <polyline fill="none" stroke="#2dd4bf" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round" stroke-linecap="round" points="70.0,265.4 75.7,267.2 81.4,272.1 87.1,279.4 92.9,288.3 98.6,297.7 104.3,306.6 110.0,314.5 115.7,320.9 121.4,325.9 127.1,329.4 132.9,331.9 138.6,333.6 144.3,334.9 150.0,336.1 155.7,337.6 161.4,339.7 167.1,342.4 172.9,345.6 178.6,349.1 184.3,352.8 190.0,356.2 195.7,359.1 201.4,361.5 207.1,363.4 212.9,364.6 218.6,365.3 224.3,365.7 230.0,365.7 235.7,365.7 241.4,365.7 247.1,366.0 252.9,366.6 258.6,367.7 264.3,369.0 270.0,370.6 275.7,372.3 281.4,373.8 287.1,375.0 292.9,376.0 298.6,376.6 304.3,376.9 310.0,376.9 315.7,376.6 321.4,376.0 327.1,375.4 332.9,374.8 338.6,374.5 344.3,374.6 350.0,375.1 355.7,376.1 361.4,377.4 367.1,378.8 372.9,380.0 378.6,381.0 384.3,381.6 390.0,381.9 395.7,381.8 401.4,381.2 407.1,379.7 412.9,376.7 418.6,370.7 424.3,358.7 430.0,336.0"/>
+
+    <!-- legend -->
+    <line x1="250" y1="266" x2="272" y2="266" stroke="#93c5fd" stroke-width="3"/>
+    <text x="278" y="270" font-size="10.5" fill="#94a3b8">teacher spectrum (group average)</text>
+    <line x1="250" y1="284" x2="272" y2="284" stroke="#2dd4bf" stroke-width="2" stroke-dasharray="5 3"/>
+    <text x="278" y="288" font-size="10.5" fill="#94a3b8">reconstruction from 8 coefficients</text>
+  </g>
+
+  <!-- coefficient bars -->
+  <g font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif">
+    <text x="545" y="248" font-size="11.5" font-weight="600" fill="#e2e8f0">the 8 coefficients</text>
+    <line x1="545" y1="322" x2="795" y2="322" stroke="#475569" stroke-width="1"/>
+    <rect x="551.9" y="322.0" width="17.5" height="49.3" rx="2" fill="#f472b6"/>
+    <rect x="583.1" y="263.8" width="17.5" height="58.2" rx="2" fill="#2dd4bf"/>
+    <rect x="614.4" y="322.0" width="17.5" height="17.5" rx="2" fill="#f472b6"/>
+    <rect x="645.6" y="302.1" width="17.5" height="19.9" rx="2" fill="#2dd4bf"/>
+    <rect x="676.9" y="322.0" width="17.5" height="10.7" rx="2" fill="#f472b6"/>
+    <rect x="708.1" y="310.0" width="17.5" height="12.0" rx="2" fill="#2dd4bf"/>
+    <rect x="739.4" y="322.0" width="17.5" height="7.7" rx="2" fill="#f472b6"/>
+    <rect x="770.6" y="313.5" width="17.5" height="8.5" rx="2" fill="#2dd4bf"/>
+    <text x="560" y="392" text-anchor="middle" font-size="9" fill="#64748b">c&#8320;</text>
+    <text x="779" y="392" text-anchor="middle" font-size="9" fill="#64748b">c&#8327;</text>
+    <text x="670" y="410" text-anchor="middle" font-size="10.5" fill="#94a3b8">32 floats across the weight groups &#8776; 128 bytes</text>
+  </g>
+</svg>

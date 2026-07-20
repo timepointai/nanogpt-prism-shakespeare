@@ -58,6 +58,27 @@ No parameters are copied. Only geometry.
 
 <img src="assets/prism-taxonomy.svg" alt="Transfer learning taxonomy: random init, then Prism (structure only, proposed), then LoRA/adapters, fine-tuning, and distillation at the far end." width="100%">
 
+### How the imprint is derived
+
+The Spectral Imprint is the compact half of the method — the part that fits in
+128 bytes. SVD every trained weight matrix, normalize its singular values, and
+average them within each weight group (attention, FFN up, FFN down, embedding).
+Each group's averaged spectrum is a smooth, monotonically decaying curve — and a
+smooth curve is exactly what a few cosine terms capture well. So the curve is
+least-squares fit to **8 cosine (DCT) coefficients** in an inverse-softplus space
+(which keeps the reconstruction positive). Those 8 numbers per group — ~128 bytes
+total — softplus-reconstruct back to the spectrum, and the student's singular
+values are reshaped to match.
+
+<img src="assets/prism-imprint.svg" alt="Deriving the spectral imprint: SVD each trained weight matrix, normalize and average the singular values per group, then least-squares fit 8 cosine (DCT) coefficients in inverse-softplus space. The plot overlays a real group-averaged singular-value spectrum against its reconstruction from just 8 coefficients (mean absolute error ~0.03), alongside a bar chart of those 8 coefficients — about 128 bytes total." width="100%">
+
+The plot above is real, not illustrative: it overlays a group-averaged spectrum
+against its reconstruction from 8 coefficients (mean absolute error ~0.03). Eight
+numbers carry the shape; only the extreme low-energy tail drifts. That smoothness
+is the whole reason the structure compresses so hard — and the caveat that
+directional information (the U, V matrices) does *not* compress the same way is in
+[Limitations](#limitations).
+
 ## Why it would matter
 
 *These are motivations, not findings.*
