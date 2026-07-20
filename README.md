@@ -1,24 +1,34 @@
 # Prism
 
-**Every trained neural network learns two things. We keep one and throw the other away.**
+**Hand a fresh model nothing but the *spectral geometry* of a trained one — no
+weights, no data — and it stops overfitting.** On nanoGPT Shakespeare it reached,
+in ~100 steps, the quality its baseline needed ~1,350 steps to hit, then kept
+improving while the baseline overfit and fell apart. Three seeds, same story.
 
-The weights are what a model learned. But *how* it organized itself to learn —
-which directions in weight space it decided mattered, how it distributed energy
-across them — is a second artifact, and it goes in the bin the moment training
-ends. The next model starts from noise and rediscovers all of it.
+| nanoGPT Shakespeare, 5,000 steps | Baseline | Prism recipe |
+|---|---|---|
+| Best validation loss | 1.78 (@ ~1,350) | **1.66** |
+| Loss at step 5,000 (where you'd actually stop) | **2.30 — overfit, collapsed** | **1.66 — stable** |
+| Overfits within 5,000 steps | yes — all 3 seeds | **no — 0 of 3** |
+| Steps to the baseline's best quality | ~1,350 | **≤100** |
 
-Prism is an attempt to keep that second artifact and hand it to the next model.
+The baseline peaks and then *rots* — its final loss (2.30) is far worse than its
+own best (1.78). The recipe clears the baseline's best by the first checkpoint and
+holds a floor the baseline never reaches at any point in training. **That regime
+gap is the story;** the "~7% better best-vs-best" figure badly undersells it.
 
-> **Status: a reproducible effect, not yet attributed to the method.** A
-> three-seed benchmark ([results/](results/)) shows the Prism *recipe* reaching
-> **~7% lower** best validation loss than the baseline and **not overfitting**
-> where the baseline does, on every seed. The effect is real and repeatable — but
-> it is **not yet isolated to the spectral transfer**. The recipe also halves the
-> learning rate and adds a regularizer, so the schedule, not the spectral method,
-> may be doing the work; the baseline's overfitting is what too high a learning
-> rate looks like. And because teacher and student share the training split, even
-> a clean result wouldn't yet separate structure from content leakage. Two
-> controls would settle this; **neither has run.** See [Status](#status).
+Every trained network learns two things: the weights (what it learned) and the
+spectral geometry of those weights (how it organized itself to learn). Standard
+practice keeps the first and bins the second. Prism keeps the second and hands it
+to the next model.
+
+> **The honest caveat, up front.** This compares the Prism *recipe config* to
+> nanoGPT's *default config* — and the recipe also lowers the learning rate
+> (1e-3 → 5e-4) and adds a regularizer. So the picture above is not yet creditable
+> to the *spectral method*: a too-high baseline learning rate alone could produce
+> it. One cheap control settles that, and it hasn't been run. The effect is real
+> and reproducible; whether Prism is *why* is the open question. See
+> [Status](#status) and [What's next](#whats-next).
 
 <img src="assets/prism-method.svg" alt="How Prism works: SVD a trained teacher into directions (U, V) and a spectrum (sigma), compress the spectrum to 8 DCT coefficients, inject both into a fresh student, then hold the student toward the spectral target with the mod wheel." width="100%">
 
@@ -173,25 +183,36 @@ worse than another's produces a bigger score without a better method. That is
 precisely how this repo talked itself into a 13x. A score marked `left_censored`
 means the target was hit at the first eval and the true crossing is unresolved.
 
-## What would make this real
+## What's next
 
-In order — each is a prerequisite for the next mattering:
+**The experiment to run now: the endurance test.** The recipe hadn't overfit at
+5,000 steps — so where is its ceiling? Take it to 20,000–50,000 steps and find the
+step where validation loss stops falling and starts to rise, if it ever does.
+Either outcome is worth having:
 
-1. **A schedule-matched control.** `prism_init=False` at the recipe's learning
-   rate (5e-4) and warmup. Does the improvement survive when the *only* difference
-   from the baseline is the spectral method? If not, there is no result — it was
-   the learning rate. This runs first, and it's cheap.
-2. **The cross-data test.** Fingerprint from one half of the data, student on the
-   disjoint other half. Only if the control passes: distinguishes spectral transfer
-   from content leakage.
-3. **A regularization-matched baseline.** Prism's mod wheel versus tuned dropout /
-   weight decay / early stopping — the sharper version of control #1 for the
-   anti-overfitting claim specifically.
-4. **Scale.** Shakespeare is ~1M characters. GPT-2 124M on OpenWebText is the
-   first honest test of whether any of this survives contact with real data.
+- **It holds** (or keeps descending): direct evidence that the mod wheel *removes*
+  the overfitting ceiling rather than merely postponing it — the boldest claim in
+  this repo, tested head-on.
+- **It destabilizes at step N**: then N is a real, measured number — the actual
+  ceiling — and that is publishable too.
 
-(Multi-seed is done — the committed result is three seeds, and the range is
-published, not the best seed.)
+Run a **schedule-matched baseline** (`prism_init=False` at LR 5e-4) in the *same*
+job, and the endurance run does double duty — it also settles attribution: if the
+matched baseline holds the floor too, the effect was the learning rate; if only the
+recipe holds, the spectral method is doing something real.
+
+After that, in order:
+
+1. **Attribution** — folded into the endurance run above. Nothing else counts until
+   the effect survives with the spectral method as the *only* difference from the
+   baseline.
+2. **Cross-data** — fingerprint from one half of the data, student on the disjoint
+   other half. Separates structural transfer from content leakage; only meaningful
+   once attribution holds.
+3. **Scale** — GPT-2 124M on OpenWebText: the first honest test against real data.
+
+(Multi-seed is already done — the committed result is three seeds, range published,
+not the best seed.)
 
 ## Limitations
 
