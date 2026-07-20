@@ -64,8 +64,14 @@ def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int,
         print(f"cloning {REPO_URL} → {REPO}", flush=True)
         subprocess.run(["git", "clone", REPO_URL, REPO], check=True)
     else:
-        print("repo present on Volume — pulling latest code", flush=True)
-        subprocess.run(["git", "-C", REPO, "pull", "--ff-only"], check=False)
+        print("repo present on Volume — syncing to origin/master", flush=True)
+        subprocess.run(["git", "-C", REPO, "fetch", "origin", "--quiet"], check=False)
+        # Hard reset, not pull: a results/*.json the eval wrote can later become
+        # tracked in git, and `git pull` aborts rather than overwrite an untracked
+        # file. reset --hard force-syncs tracked files (identical content) while
+        # leaving untracked resume state (.prism_runs / .prism_cache) intact.
+        subprocess.run(["git", "-C", REPO, "reset", "--hard", "origin/master"],
+                       check=False)
     vol.commit()
 
     # Run the resumable eval as a child; echo its live stream and snapshot the
