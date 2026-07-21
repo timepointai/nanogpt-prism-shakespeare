@@ -1,11 +1,16 @@
 # results/
 
-Eval artifacts. **This directory is the evidence.** It holds one committed run —
-`recipe_20260718T002717Z.json`, three seeds — which shows a reproducible effect
-(the recipe reaching ~7% lower loss with no overfitting) that is **not yet
-attributed to the spectral method**: the recipe also changes the learning rate, so
-a schedule-matched control (`prism_init=False` at LR 5e-4) is still needed to know
-whether Prism causes it. See [RESULTS.md](../RESULTS.md).
+Eval artifacts. **This directory is the evidence.** Two committed runs:
+
+- `recipe_20260718T002717Z.json` — recipe at LR 5e-4 vs. baseline at LR 1e-3
+  (the recipe as tuned; best loss ~1.66, no overfitting, but confounded by the LR
+  difference).
+- `recipe_20260720T230405Z.json` — the **attribution control**: recipe at the
+  baseline's own LR 1e-3, `schedule_matched: true`, only the spectral flags differ.
+  Best ~1.67, no overfitting, ~7× faster — so the effect is the spectral method,
+  not the learning rate.
+
+See [RESULTS.md](../RESULTS.md) for the full comparison and what remains open.
 
 Every file here is written by `src/prism_eval.py` and contains, for each seed:
 the full baseline and method loss curves, best loss and step, the Prism Score

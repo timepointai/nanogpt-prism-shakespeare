@@ -1,123 +1,111 @@
-# Prism × nanoGPT — Results
+# Prism × nanoGPT — Results (v0.1)
 
-> **First committed result (2026-07-18).** Every number below comes from one
-> artifact — [`results/recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json)
-> — produced by `src/prism_eval.py` on an NVIDIA L4 (torch 2.13, CUDA) across
-> three seeds (1337, 1338, 1339). It is reproducible from that file.
->
-> This **supersedes and removes** the earlier tables (an "alpha run" with baseline
-> 1.4636, a WikiText-2 "2.7×", "sprint 3.8–4.8× across seeds", "80+ runs", a
-> "71% cross-data" figure). None had a committed artifact, and several were
-> mechanically impossible — seeds were never varied in the old code, and the
-> cross-data test never ran. They are deleted rather than quarantined.
->
-> **Scope — read before the numbers.** This measures the Prism *recipe config*
-> against nanoGPT's *default config*, not the spectral method against its absence.
-> The recipe halves the learning rate (1e-3 → 5e-4) and adds a regularizer, so the
-> improvement is **not yet attributable to Prism** — a schedule-matched control has
-> not been run. And it is **same-data** (teacher and student share the 80% split),
-> so even a clean control would not rule out content leakage. Two controls, in
-> order, would settle it; neither has run (see below).
+Two committed runs, three seeds each, on an NVIDIA L4. Every number below is
+reproducible from an artifact in [`results/`](results/). The earlier writeup, from
+before the confound was ruled out, is archived at
+[`archive/v0.0/RESULTS.md`](archive/v0.0/RESULTS.md).
 
-## The result — nanoGPT Shakespeare char-level (10.65M params)
+## The two runs
 
-Teacher trained 2000 steps; baseline and Prism-recipe students 5000 steps each,
-evaluated every 100 steps on the held-out Shakespeare validation set. Three seeds.
+**Run A — the recipe as tuned** ([`recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json)):
+recipe at LR 5e-4 vs. baseline at the config default LR 1e-3.
 
-| | Baseline | Prism Recipe |
-|---|---|---|
-| Best val loss (median of 3) | 1.782 | **1.656** |
-| &nbsp;&nbsp;range across seeds | 1.778 – 1.785 | 1.655 – 1.658 |
-| Val loss @ step 5000 | ~2.31 (overfit) | ~1.66 (stable) |
-| Overfits within 5000 steps | **yes — all 3 seeds** | **no — 0 of 3** |
-| Steps to baseline's best quality | — | **≤100 (≥13–14×, lower bound)** |
+**Run B — the attribution control** ([`recipe_20260720T230405Z.json`](results/recipe_20260720T230405Z.json)):
+recipe at LR **1e-3**, matched to the baseline. `schedule_matched: true` — the two
+arms differ by *nothing but the spectral flags*.
 
-Per seed:
+Teacher 2,000 steps; students 5,000 steps, eval every 100, held-out Shakespeare
+validation set.
+
+| | Baseline (LR 1e-3) | Recipe (LR 5e-4) | Recipe (LR 1e-3, matched) |
+|---|---|---|---|
+| Best val loss (median of 3) | 1.782 | 1.656 | **1.671** |
+| &nbsp;&nbsp;range across seeds | 1.781–1.783 | 1.655–1.658 | 1.671–1.674 |
+| Val loss @ step 5,000 | ~2.31 (overfit) | ~1.66 (stable) | ~1.67 (stable) |
+| Overfits within 5,000 steps | yes — 3/3 | no — 0/3 | no — 0/3 |
+| Prism Score (steps to baseline's best) | — | ≥13–14× (left-censored) | **7× (median; measured, not censored)** |
+
+Per seed, matched-LR run (Run B):
 
 | seed | baseline best @step | baseline @5000 | recipe best @step | recipe @5000 | Prism Score |
 |---|---|---|---|---|---|
-| 1337 | 1.7783 @1400 | 2.3017 | 1.6577 @5000 | 1.6577 | ≥14× |
-| 1338 | 1.7823 @1300 | 2.3225 | 1.6550 @3900 | 1.6634 | ≥13× |
-| 1339 | 1.7854 @1400 | 2.3008 | 1.6557 @4700 | 1.6656 | ≥14× |
+| 1337 | 1.7822 @1400 | 2.3075 | 1.6709 @5000 | 1.6709 | 7.0× (hit @200) |
+| 1338 | 1.7832 @1400 | 2.3062 | 1.6742 @5000 | 1.6742 | 7.0× (hit @200) |
+| 1339 | 1.7806 @1300 | 2.3341 | 1.6712 @4700 | 1.6809 | 6.5× (hit @200) |
 
-**Three findings, consistent across all three seeds** — and a reminder of what the
-comparison actually is:
+## What this establishes
 
-1. **Lower loss (directly measured, not censored).** The recipe reaches ~1.656 vs
-   the baseline's best of ~1.782 — about **7% lower** best validation loss, every seed.
-2. **No overfitting.** The baseline peaks near step 1350 and then degrades to
-   ~2.31 by step 5000 on all three seeds. The recipe holds near its best and
-   overfits on none.
-3. **Faster to parity — but a lower bound.** The recipe crosses the baseline's
-   *best* loss by the first eval (step 100) on all three seeds, so the Prism Score
-   of 13–14× is **left-censored**: the true crossing lies below step 100 and is not
-   resolved by this eval. Read 13–14× as a floor, not a point estimate.
+**The effect is attributable to the spectral method, not the learning rate.** Run B
+holds the learning rate identical to the baseline and toggles only the spectral
+flags. At that matched schedule, where the baseline overfits and decays to ~2.31,
+the recipe reaches ~1.67 and holds, and crosses the baseline's best quality ~7×
+faster. So the "maybe it was just the lower learning rate" explanation is closed.
 
-**But the baseline here uses LR 1e-3 and the recipe uses 5e-4** (plus the mod-wheel
-regularizer). Overfitting from 1.78 to 2.30 is the classic signature of a
-learning rate too high for a tiny dataset — so findings 1 and 2 may be the
-schedule, not the spectral method. That is the first thing the controls below test.
+Two supporting points:
+
+- **Two learning rates both favor Prism.** The recipe is slightly better at 5e-4
+  (1.656) than at 1e-3 (1.671), so 5e-4 is mildly better-tuned for it — but it wins
+  at both, which is stronger than a single operating point.
+- **The speed number is now measured.** At 5e-4 the recipe crossed the baseline's
+  best before the first eval (step 100), so the score was a left-censored lower
+  bound. At 1e-3 the crossover moved to step 200, so the eval resolved it: 7×, a
+  real measurement.
+
+## What this does NOT establish
+
+- **Structure vs. content.** Both runs are same-data (teacher and student share the
+  80% split). This shows Prism transfers something real and useful; it does not show
+  that what transfers is *structure* rather than the teacher leaking *content*. Only
+  the cross-data test can (below).
+- **Spectral vs. generic regularization.** The mod wheel is a regularizer. We've
+  shown it beats a schedule-matched baseline, but not that the *spectral* nature
+  specifically (vs. tuned dropout / weight decay / early stopping) is what prevents
+  overfitting. The `spectral_only` / `dirs_only` arms and a reg-matched baseline
+  address this.
+- **A full LR sweep.** Two shared operating points is not the gold standard of
+  comparing each arm at *its own best* learning rate. The matched-LR comparison is
+  the decisive one for attribution, but a small sweep would make it airtight.
+- **Scale.** Shakespeare only, 10.65M params.
 
 ## Reproduce it
 
 ```bash
-git clone https://github.com/timepointai/nanogpt-prism-shakespeare.git
-cd nanogpt-prism-shakespeare/src
+cd src
 pip install torch numpy transformers tiktoken datasets
-python prism_eval.py                 # seeds 1337,1338,1339; writes results/*.json
-python prism_eval.py --report        # reprint the last artifact
+python prism_eval.py                                      # Run A: recipe @ 5e-4
+python prism_eval.py --method_lr=1e-3 --method_warmup=100 # Run B: matched — only spectral flags differ
+python prism_eval.py --report                             # reprint the last artifact
 ```
 
-The run is stepwise and resumable — each seed's stages bank to disk as they finish
-— and it writes a full artifact (loss curves, git commit, GPU, argv) to `results/`.
-The rule: a number in this file must have a matching `results/*.json`.
+The eval is stepwise and resumable (each seed's stages bank to disk), records
+provenance and whether the schedule was matched, and refuses to score a partial or
+crashed run. A number in these docs must have a matching `results/*.json`.
 
-## What is NOT established
+## The next experiments, in order
 
-- **That Prism caused it.** The recipe differs from the baseline by learning rate
-  and a regularizer *as well as* the spectral method, so the improvement may be the
-  schedule. Nothing here isolates the spectral transfer. This is the biggest gap.
-- **Structure vs. content.** Even with a clean control, same-data transfer cannot
-  separate "Prism moved organizational structure" from "the teacher handed over
-  answers." Only the cross-data test can.
-- **Anti-overfitting vs. generic regularization.** The mod wheel is a regularizer;
-  it has not been compared against tuned dropout / weight decay / early stopping.
-- **The exact speedup.** Left-censored (above), and measured against a baseline
-  that may be hobbled by too high a learning rate. Resolving it needs dense early
-  evaluation (steps 10 / 25 / 50 / 75).
-- **Scale.** Shakespeare is ~1M characters, 10.65M params. Nothing here has been
-  tested at GPT-2 124M / OpenWebText scale.
-
-## The two controls that decide it (in order)
-
-**1. Schedule-matched control — does the spectral method do anything?**
-Run the baseline again with `prism_init=False` but at the recipe's schedule
-(learning rate 5e-4, warmup 50). If it also lands near ~1.66 and stops overfitting,
-the result above was the learning rate and Prism adds nothing measurable here. If
-it still overfits near ~1.78, the method is doing something on top of the schedule.
-This is cheap and it comes first — nothing below matters until it passes.
-
-**2. Cross-data test — is what it does structural, or a content leak?**
-Only if control 1 passes. Extract the teacher's fingerprint from one half of the
-training data and train the student on the disjoint other half, where no shared
-content remains. If the advantage survives, the transfer is structural — and every
-checkpoint ever trained holds a reusable prior nobody extracted. If it collapses,
-Prism is distillation with extra steps.
+1. **Cross-data** — fingerprint the teacher on one half of the training data, train
+   the student on the disjoint other half. If the advantage survives, the transfer
+   is structural. If it collapses, Prism is distillation with extra steps. The one
+   that decides how important this is.
+2. **Endurance** — take the recipe well past 5,000 steps (20k–50k) to find where, if
+   ever, it finally overfits. Either it holds (the ceiling is genuinely removed) or
+   it breaks at a measurable step *N*.
+3. **Ablations** — `spectral_only`, `dirs_only`, and a regularization-matched
+   baseline, to separate the spectral contribution from generic regularization.
+4. **Scale** — GPT-2 124M on OpenWebText.
 
 ## How the method works
 
-**Spectral Imprint** — SVD each teacher weight matrix, group by type (attention,
-FFN up, FFN down, embedding), average the singular-value distributions per group,
-compress each to 8 DCT coefficients (~128 bytes total), and reshape the student's
-spectrum to match.
+**Spectral Imprint** — SVD each teacher weight matrix, group by type, average the
+singular-value distributions per group, compress each to 8 DCT coefficients
+(~128 bytes total), reshape the student's spectrum to match.
 
 **EigenTransfer** — blend the student's singular vectors 75% toward the teacher's,
-then re-orthogonalize. The student starts with the teacher's directional scaffolding.
+re-orthogonalize.
 
 **Mod Wheel** — after each optimizer step, `W ← (1 − s)·W + s·W_target`, with
 `s = 0.01` decaying by `0.9999` per step. A continuous, zero-storage spectral
 regularizer.
 
-The 128-byte figure is the spectrum only. The directional matrices (U, V) are
-~500 MB uncompressed; compressing them is an open problem, so "128 bytes"
-describes one tier of the method, not the whole thing.
+The 128-byte figure is the spectrum only; the directional matrices (U, V) are
+~500 MB uncompressed and compressing them is an open problem.
