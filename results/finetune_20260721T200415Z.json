@@ -1,0 +1,245 @@
+{
+  "schema": "prism-finetune/1",
+  "partial": false,
+  "run_key": "ft_far_b2000_f300_e25_lr3e-4_bs32_bl256_seeds1337",
+  "provenance": {
+    "created_utc": "2026-07-21T20:08:52.753242+00:00",
+    "git_commit": "980773899a317e0726cb0352908f6c2bba1257eb",
+    "git_dirty": true,
+    "python": "3.11.12",
+    "argv": [
+      "--base_steps=2000",
+      "--ft_steps=300",
+      "--eval_every=25",
+      "--seeds=1337",
+      "--arms=base,plain,selfanchor",
+      "--learning_rate=3e-4",
+      "--min_lr=3e-5",
+      "--batch_size=32",
+      "--block_size=256",
+      "--far_corpus=data/far.txt"
+    ],
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA L4"
+  },
+  "config": {
+    "far_corpus": "data/far.txt",
+    "base_steps": 2000,
+    "ft_steps": 300,
+    "ft_warmup": 20,
+    "eval_every": 25,
+    "eval_iters": 200,
+    "seeds": [
+      1337
+    ],
+    "arms": [
+      "base",
+      "plain",
+      "selfanchor"
+    ],
+    "learning_rate": "3e-4",
+    "min_lr": "3e-5",
+    "ceiling_lr": "1e-3",
+    "batch_size": 32,
+    "block_size": 256,
+    "device": "cuda",
+    "prism_mod": 0.01,
+    "prism_mod_decay": 1.0,
+    "prism_mod_decay_note": "constant pull during finetune (decay=1.0): the canonical 0.9999 anneals a from-scratch reshape, which is not happening on resume; a constant pull removes the resume-iter clock.",
+    "schedule_matched": true,
+    "schedule_matched_note": "plain (prism_mod=0) and selfanchor (prism_mod=0.01) share LR/warmup/steps/data \u2014 the ONLY difference is the mod wheel.",
+    "distances": {
+      "far_corpus": "far.txt",
+      "ft_train_tokens": 499444,
+      "ft_val_tokens": 55493,
+      "token_js_new_vs_old_train": 0.027323,
+      "token_js_new_train_vs_old_val": 0.036136
+    }
+  },
+  "runs": [
+    {
+      "seed": 1337,
+      "base": {
+        "ckpt": "out-ft-base-s1337/ckpt.pt",
+        "val_best": 1.4992,
+        "val_end": 1.4992,
+        "curve": {
+          "0": 4.2821,
+          "2000": 1.4992
+        }
+      },
+      "arms": {
+        "plain": {
+          "arm": "plain",
+          "adapt_curve": {
+            "2000": 1.7495,
+            "2025": 1.4382,
+            "2050": 1.3842,
+            "2075": 1.3586,
+            "2100": 1.3381,
+            "2125": 1.3287,
+            "2150": 1.3195,
+            "2175": 1.3088,
+            "2200": 1.3061,
+            "2225": 1.304,
+            "2250": 1.2909,
+            "2275": 1.2969,
+            "2300": 1.2953
+          },
+          "adapt_best": 1.2909,
+          "adapt_best_step": 2250,
+          "adapt_at_end": 1.2953,
+          "adapt_overfits": false,
+          "retain_curve": {
+            "2000": 1.499,
+            "2025": 1.6593,
+            "2050": 1.6749,
+            "2075": 1.6993,
+            "2100": 1.7212,
+            "2125": 1.7214,
+            "2150": 1.7327,
+            "2175": 1.7323,
+            "2200": 1.7371,
+            "2225": 1.739,
+            "2250": 1.745,
+            "2275": 1.7409,
+            "2300": 1.7391
+          },
+          "retain_at_base": 1.499,
+          "retain_at_end": 1.7391
+        },
+        "selfanchor": {
+          "arm": "selfanchor",
+          "adapt_curve": {
+            "2000": 1.7495,
+            "2025": 1.4396,
+            "2050": 1.3909,
+            "2075": 1.3713,
+            "2100": 1.3577,
+            "2125": 1.3545,
+            "2150": 1.3509,
+            "2175": 1.3486,
+            "2200": 1.3533,
+            "2225": 1.3656,
+            "2250": 1.3657,
+            "2275": 1.3881,
+            "2300": 1.4029
+          },
+          "adapt_best": 1.3486,
+          "adapt_best_step": 2175,
+          "adapt_at_end": 1.4029,
+          "adapt_overfits": false,
+          "retain_curve": {
+            "2000": 1.499,
+            "2025": 1.6362,
+            "2050": 1.6271,
+            "2075": 1.6307,
+            "2100": 1.6367,
+            "2125": 1.6324,
+            "2150": 1.637,
+            "2175": 1.6193,
+            "2200": 1.6113,
+            "2225": 1.5963,
+            "2250": 1.5901,
+            "2275": 1.5718,
+            "2300": 1.5552
+          },
+          "retain_at_base": 1.499,
+          "retain_at_end": 1.5552
+        }
+      },
+      "metrics": {
+        "retention_at_base": 1.499,
+        "retention_at_base_selfanchor": 1.499,
+        "forgetting_plain": 0.2401,
+        "forgetting_mod": 0.0562,
+        "forgetting_ratio": 4.272,
+        "retention_gap": 0.1839,
+        "adapt_best_plain": 1.2909,
+        "adapt_best_mod": 1.3486,
+        "adaptation_cost": 1.0447,
+        "overfit_averted": false,
+        "retention_floored": false,
+        "adaptation_censored": false
+      }
+    }
+  ],
+  "per_seed_metrics": [
+    {
+      "retention_at_base": 1.499,
+      "retention_at_base_selfanchor": 1.499,
+      "forgetting_plain": 0.2401,
+      "forgetting_mod": 0.0562,
+      "forgetting_ratio": 4.272,
+      "retention_gap": 0.1839,
+      "adapt_best_plain": 1.2909,
+      "adapt_best_mod": 1.3486,
+      "adaptation_cost": 1.0447,
+      "overfit_averted": false,
+      "retention_floored": false,
+      "adaptation_censored": false
+    }
+  ],
+  "summary": {
+    "n_seeds": 1,
+    "forgetting_plain": {
+      "median": 0.2401,
+      "min": 0.2401,
+      "max": 0.2401,
+      "values": [
+        0.2401
+      ]
+    },
+    "forgetting_mod": {
+      "median": 0.0562,
+      "min": 0.0562,
+      "max": 0.0562,
+      "values": [
+        0.0562
+      ]
+    },
+    "forgetting_ratio": {
+      "median": 4.272,
+      "min": 4.272,
+      "max": 4.272,
+      "values": [
+        4.272
+      ]
+    },
+    "retention_gap": {
+      "median": 0.1839,
+      "min": 0.1839,
+      "max": 0.1839,
+      "values": [
+        0.1839
+      ]
+    },
+    "adaptation_cost": {
+      "median": 1.0447,
+      "min": 1.0447,
+      "max": 1.0447,
+      "values": [
+        1.0447
+      ]
+    },
+    "adapt_best_plain": {
+      "median": 1.2909,
+      "min": 1.2909,
+      "max": 1.2909,
+      "values": [
+        1.2909
+      ]
+    },
+    "adapt_best_mod": {
+      "median": 1.3486,
+      "min": 1.3486,
+      "max": 1.3486,
+      "values": [
+        1.3486
+      ]
+    },
+    "overfit_averted_all": false,
+    "retention_floored_any": false,
+    "adaptation_censored_any": false
+  }
+}
