@@ -1,14 +1,34 @@
 # results/
 
-Eval artifacts. **This directory is the evidence.** Two committed runs:
+Eval artifacts. **This directory is the evidence.** Committed runs:
 
 - `recipe_20260718T002717Z.json` — recipe at LR 5e-4 vs. baseline at LR 1e-3
   (the recipe as tuned; best loss ~1.66, no overfitting, but confounded by the LR
-  difference).
+  difference; score left-censored at ≥13–14×).
 - `recipe_20260720T230405Z.json` — the **attribution control**: recipe at the
   baseline's own LR 1e-3, `schedule_matched: true`, only the spectral flags differ.
   Best ~1.67, no overfitting, ~7× faster — so the effect is the spectral method,
   not the learning rate.
+- `recipe_20260721T022342Z.json` — sliding-window overlap sweep. **Record only:
+  its interpretation is retired** — window position correlated with slice
+  difficulty (baseline drifted 1.88→1.55 across the sweep), so the apparent
+  overlap dependence was a confound. Superseded by the next artifact.
+- `recipe_20260721T050203Z.json` — difficulty-controlled overlap probe (random
+  blocks, 12 overlaps × 3 seeds, 100 steps, matched LR): the early advantage is
+  **flat** across overlap 1.0 → 0.0 (Δloss ~0.57–0.59, ~23%) — the head start
+  does not depend on shared teacher/student content, within-domain.
+- `recipe_20260721T142104Z.json` — **un-censored speed**: dense eval (every 10)
+  over 1,500 steps, tuned recipe. Score resolved: **11.8× median (10.2–11.9×)**,
+  `left_censored: false`. Crossover ~step 100 vs. baseline best ~step 1,020–1,400.
+- `recipe_20260721T143246Z.json` — **teacher-strength sweep** (100→2,000 teacher
+  steps, 300-step students): advantage is monotonic in teacher strength and
+  unsaturated at 2,000; a 100-step teacher is *actively worse than random init*
+  (method 2.249 vs. baseline 2.180).
+- `recipe_20260721T153218Z.json` — far-corpus sweep (student's fresh blocks from
+  Sherlock Holmes, token-JS up to 0.027): Δloss flat across distance. **Scope
+  caveat:** the student is scored on the *Shakespeare* val set in this protocol,
+  so this shows the teacher-geometry init isn't washed out by far-domain
+  training — it does not yet measure accelerated learning *of* the far domain.
 
 See [RESULTS.md](../RESULTS.md) for the full comparison and what remains open.
 
