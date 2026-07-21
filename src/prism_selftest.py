@@ -124,6 +124,29 @@ for kw in [dict(),
     except Exception as e:
         check(f'apply_prism runs {kw}: {type(e).__name__}: {e}', False)
 
+# ── mod-wheel self-anchor invariant (the finetune-retention operation) ──
+# train.py's finetune path captures targets from the resumed weights and, each
+# step, does param.data.lerp_(target, mod). Verify that exact operation: one step
+# moves a drifted weight (1-mod) of the way back toward its anchor, and never away.
+print('mod-wheel self-anchor (lerp toward captured targets):')
+m2 = fresh()
+anchors = {n: p.data.clone() for n, p in m2.named_parameters() if p.dim() >= 2}
+with torch.no_grad():
+    for n, p in m2.named_parameters():
+        if n in anchors:
+            p.data.add_(torch.randn_like(p))          # drift away from the anchor
+name0 = next(n for n, p in m2.named_parameters() if p.dim() >= 2)
+p0 = dict(m2.named_parameters())[name0]
+before = (p0.data - anchors[name0]).norm().item()
+mod = 0.01
+with torch.no_grad():
+    for n, p in m2.named_parameters():
+        if n in anchors:
+            p.data.lerp_(anchors[n], mod)             # the mod-wheel step
+after = (p0.data - anchors[name0]).norm().item()
+check('one mod step reduces distance to anchor', after < before)
+check('reduction is exactly (1-mod) of the gap', abs(after - (1 - mod) * before) < 1e-4 * before)
+
 print(f'\n{len(PASS)} passed, {len(FAIL)} failed')
 if FAIL:
     print('FAILED:', FAIL)
