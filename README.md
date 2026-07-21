@@ -5,7 +5,7 @@ attribution pass; [v0.0 here](archive/v0.0/) — before the confound was ruled o
 
 <img src="assets/prism-flashlight.svg" alt="A spectrographic flashlight for models: a trained checkpoint's raw weights enter a prism as white light and split into four spectral bands — attention, FFN up, FFN down, embedding — each carrying a spectrum and directions. A reversed prism recombines the bands into a fresh model that trains about 12 times faster. Geometry crosses; content never does." width="100%">
 
-<a href="docs/how-prism-works.html"><img src="assets/prism-explainer-button.svg" alt="HOW PRISM WORKS — THE VISUAL EXPLAINER: the flashlight metaphor, node-level math, graph-level transfer, and the measurements" width="100%"></a>
+<a href="https://timepointai.github.io/nanogpt-prism-shakespeare/docs/how-prism-works.html"><img src="assets/prism-explainer-button.svg" alt="HOW PRISM WORKS — THE VISUAL EXPLAINER: the flashlight metaphor, node-level math, graph-level transfer, and the measurements" width="100%"></a>
 
 ---
 
@@ -122,9 +122,9 @@ before you run:
    otherwise-identical rig, never stacked.
 
 A machine-readable summary of the method and all measurements is embedded at the
-bottom of the visual explainer, [`docs/how-prism-works.html`](docs/how-prism-works.html) —
-a standalone, self-contained page (no scripts, no external requests). Open it
-locally, or serve it first-party via GitHub Pages or the Timepoint site.
+bottom of the [visual explainer](https://timepointai.github.io/nanogpt-prism-shakespeare/docs/how-prism-works.html) —
+a standalone, self-contained page (no scripts, no external requests), served
+first-party from GitHub Pages; the source is [`docs/how-prism-works.html`](docs/how-prism-works.html).
 
 ## The idea
 
