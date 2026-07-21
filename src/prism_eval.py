@@ -21,10 +21,11 @@ Usage:
     python prism_eval.py --baseline_lr=5e-4 --baseline_warmup=50
 
     # The data-overlap sweep — does the advantage survive as teacher and student
-    # stop sharing data? Wide + shallow (Prism acts in the first ~200-300 steps):
-    python prism_eval.py --method_lr=1e-3 --method_warmup=100 \
-        --teacher_steps=1000 --student_steps=1000 --eval_every=50 \
-        --overlap=1.0,0.75,0.5,0.25,0.0
+    # stop sharing data? Difficulty-controlled (random blocks across the corpus),
+    # wide + shallow probe (Prism acts in the first ~200-300 steps):
+    python prism_eval.py --method_lr=1e-3 --method_warmup=20 --baseline_warmup=20 \
+        --teacher_steps=500 --student_steps=100 --eval_every=10 --eval_iters=40 \
+        --batch_size=32 --overlap=1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.05,0.0
     # overlap 1.0 = same-data; 0.0 = disjoint (the cross-data / structural test).
 
 Recovery:
@@ -123,22 +124,45 @@ def provenance():
     return info
 
 
+# Fixed block partition for the overlap sweep — deterministic (independent of the
+# training seed) so a given overlap always yields the same slices and can resume.
+RANDOM_SLICE_SEED = 20260721
+N_BLOCKS = 100
+
+
+def _token_js(a, b):
+    """Jensen–Shannon divergence (bits) between the token histograms of two token
+    arrays — a distributional distance. Within one corpus, random slices share a
+    distribution so this stays near 0; it only moves across domains. Recorded so
+    the sweep's x-axis (overlap) can later be related to a real distance."""
+    m = int(max(int(a.max()), int(b.max()))) + 1
+    pa = np.bincount(a, minlength=m).astype(float); pa /= pa.sum()
+    pb = np.bincount(b, minlength=m).astype(float); pb /= pb.sum()
+    pm = 0.5 * (pa + pb)
+
+    def kl(p, q):
+        mask = p > 0
+        return float(np.sum(p[mask] * np.log2(p[mask] / q[mask])))
+
+    return round(0.5 * kl(pa, pm) + 0.5 * kl(pb, pm), 6)
+
+
 def setup(workdir=SRC_DIR, overlap=None):
-    """Prepare dataset partitions.
+    """Prepare dataset partitions. Returns (n_student_tokens, n_test_tokens, dist).
 
     overlap=None (default): teacher and student share the same 80% split —
-    same-data transfer (the original protocol).
+    same-data transfer (the original protocol); dist is None.
 
-    overlap in [0,1]: the teacher/student data-overlap DIAL. Each arm gets a
-    fixed-size window of exactly HALF the train pool, so the data BUDGET is
-    constant across the sweep — only the shared fraction changes, never the
-    amount of data (that would be a second confound). The teacher always trains
-    on pool[0:W]; the student window slides so its overlap with the teacher's is
-    exactly `overlap`:
-        overlap=1.0 → identical window (same-data, on half the pool)
-        overlap=0.0 → disjoint windows (cross-data: nothing shared)
-    The student is always SCORED on the original Shakespeare val set, which is
-    held out of every window regardless of overlap."""
+    overlap in [0,1]: the teacher/student data-overlap DIAL, difficulty-controlled.
+    The pool is cut into N_BLOCKS blocks; each arm gets a RANDOM half of them, so
+    both arms span the whole corpus (same difficulty) at every overlap — the only
+    thing that varies is the fraction of blocks they SHARE. The teacher's block
+    set is fixed; the student swaps in `1-overlap` of fresh (non-teacher) blocks:
+        overlap=1.0 → identical block set (same-data)
+        overlap=0.0 → disjoint block sets (cross-data: nothing shared)
+    This removes the slice-position/difficulty confound of a sliding window. The
+    student is always SCORED on the held-out Shakespeare val set. dist carries the
+    realized overlap plus the token-JS distance between the two arms' data."""
     os.chdir(workdir)
 
     if not os.path.exists('data/shakespeare_char/train.bin'):
@@ -150,6 +174,7 @@ def setup(workdir=SRC_DIR, overlap=None):
                               dtype=np.uint16, mode='r'))
     test_data = np.array(np.memmap('data/shakespeare_char/val.bin',
                                     dtype=np.uint16, mode='r'))
+    dist = None
 
     if overlap is None:
         split = int(len(pool) * 0.80)
@@ -158,15 +183,24 @@ def setup(workdir=SRC_DIR, overlap=None):
         teacher_val = pool[split:].astype(np.uint16)
     else:
         overlap = max(0.0, min(1.0, float(overlap)))
-        n = len(pool)
-        w = n // 2                                   # constant per-arm budget
-        start = int(round(w * (1.0 - overlap)))      # slide the student window
-        teacher_train = pool[0:w].astype(np.uint16)
-        student_train = pool[start:start + w].astype(np.uint16)
-        teacher_val = test_data                      # teacher's own eval only
-        log(f'overlap={overlap:.2f}: teacher pool[0:{w}] · student '
-            f'pool[{start}:{start + w}] · shared {max(0, w - start):,} tok '
-            f'({max(0, w - start) / w:.0%} of each window)', 2)
+        blk = len(pool) // N_BLOCKS
+        blocks = pool[:blk * N_BLOCKS].reshape(N_BLOCKS, blk)
+        perm = np.random.default_rng(RANDOM_SLICE_SEED).permutation(N_BLOCKS)
+        half = N_BLOCKS // 2
+        teacher_idx, other_idx = perm[:half], perm[half:]
+        n_shared = int(round(overlap * half))
+        student_idx = np.concatenate([teacher_idx[:n_shared],
+                                      other_idx[:half - n_shared]])
+        teacher_train = blocks[teacher_idx].reshape(-1).astype(np.uint16)
+        student_train = blocks[student_idx].reshape(-1).astype(np.uint16)
+        teacher_val = test_data
+        dist = {'overlap_requested': overlap,
+                'overlap_realized': round(n_shared / half, 4),
+                'shared_blocks': n_shared, 'blocks_per_arm': half,
+                'token_js': _token_js(teacher_train, student_train)}
+        log(f'overlap={overlap:.2f}: {n_shared}/{half} blocks shared · '
+            f'token-JS {dist["token_js"]:.4f} · random blocks across corpus '
+            f'(difficulty controlled)', 2)
 
     for name, train, val in [('shakespeare_eval', student_train, test_data),
                               ('shakespeare_teacher', teacher_train, teacher_val)]:
@@ -177,7 +211,7 @@ def setup(workdir=SRC_DIR, overlap=None):
         shutil.copy('data/shakespeare_char/meta.pkl',
                      os.path.join(d, 'meta.pkl'))
 
-    return len(student_train), len(test_data)
+    return len(student_train), len(test_data), dist
 
 
 def parse_curve(stdout):
@@ -245,12 +279,13 @@ def stream_train(cmd, label, max_step, timeout=TRAIN_TIMEOUT):
     return rc, ''.join(out)
 
 
-def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval'):
+def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval',
+                  batch_size=None):
     """Train teacher model and extract fingerprint. One teacher per (seed, data,
     steps). Cached by the presence of directions.pt, so a resumed run skips it.
     cache_tag separates teachers trained on different data (e.g. the same-data
-    'eval' teacher vs. a 'sweep' teacher on pool[0:W]); the step count is in the
-    path too, so changing teacher_steps can't silently reuse a stale fingerprint."""
+    'eval' teacher vs. an 'rsweep' teacher on random blocks); the step count is in
+    the path too, so changing teacher_steps can't silently reuse a stale one."""
     cache = f'.prism_cache/{cache_tag}_teacher_s{seed}_t{steps}'
     if os.path.exists(f'{cache}/directions.pt'):
         log(f'[resume] teacher (seed {seed}) already trained — using cached '
@@ -266,7 +301,8 @@ def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval'):
         f'--out_dir=out-eval-teacher-s{seed}',
         '--always_save_checkpoint=True',
         '--compile=False', '--prism_init=False', '--wandb_log=False',
-    ], f'{label} teacher', steps)
+    ] + ([f'--batch_size={batch_size}'] if batch_size else []),
+        f'{label} teacher', steps)
 
     if rc != 0:
         raise RuntimeError(f'Teacher training failed (seed {seed}):\n{out[-2000:]}')
@@ -287,7 +323,8 @@ def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval'):
     return cache
 
 
-def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device, label):
+def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device,
+                 label, batch_size=None):
     """Run one training config. Raises on failure — never scores a partial run."""
     log(f'Running {name} (seed {seed}, {steps} steps, eval every {eval_every})…', 2)
     t0 = time.time()
@@ -297,7 +334,8 @@ def run_training(name, extra_args, seed, steps, eval_every, eval_iters, device, 
          f'--max_iters={steps}', f'--eval_interval={eval_every}',
          f'--eval_iters={eval_iters}', '--log_interval=100',
          f'--out_dir=out-eval-{name}-s{seed}',
-         '--wandb_log=False', '--compile=False'] + extra_args,
+         '--wandb_log=False', '--compile=False']
+        + ([f'--batch_size={batch_size}'] if batch_size else []) + extra_args,
         f'{label} {name}', steps)
     wall = time.time() - t0
 
@@ -553,6 +591,8 @@ def main():
     #   --overlap=1.0,0.75,0.5,0.25,0.0
     p.add_argument('--overlap', type=str, default=None,
                    help="comma-separated overlap fractions to sweep (1.0=same-data, 0.0=disjoint)")
+    p.add_argument('--batch_size', type=int, default=None,
+                   help="training batch size for all arms (default: config 64; smaller = faster/noisier probes)")
     p.add_argument('--report', action='store_true', help='print the last artifact')
     args = p.parse_args()
     device = args.device or default_device()
@@ -580,6 +620,8 @@ def main():
         'seeds': seeds,
         'device': device,
         'overlaps': overlaps,
+        'overlap_distances': {},
+        'batch_size': args.batch_size,
         'teacher_data_equals_student_data': overlaps is None,
         'method_lr': args.method_lr,
         'method_warmup': args.method_warmup,
@@ -659,9 +701,12 @@ def main():
 
         runs = []
         for overlap in sweep:
-            n_train, n_test = setup(overlap=overlap)
-            tag = 'eval' if overlap is None else 'sweep'
+            n_train, n_test, dist = setup(overlap=overlap)
+            if dist is not None:
+                config['overlap_distances'][f'{overlap:g}'] = dist
+            tag = 'eval' if overlap is None else 'rsweep'
             osfx = '' if overlap is None else f'_o{overlap:g}'
+            bs = args.batch_size
             print('-' * 64)
             if overlap is None:
                 log(f'Train: {n_train:,} tokens | Test: {n_test:,} tokens', 2)
@@ -674,7 +719,7 @@ def main():
                 stage[0] += 1
                 log(f'[stage {stage[0]}/{total_stages}] teacher (seed {seed})', 2)
                 cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
-                                      device, lbl, cache_tag=tag)
+                                      device, lbl, cache_tag=tag, batch_size=bs)
 
                 baseline_extra = ['--prism_init=False']
                 if args.baseline_lr:
@@ -687,7 +732,7 @@ def main():
                 baseline = cached_stage(run_dir, f's{seed}{osfx}_baseline', lambda:
                     run_training('baseline', baseline_extra, seed,
                                  args.student_steps, args.eval_every,
-                                 args.eval_iters, device, lbl))
+                                 args.eval_iters, device, lbl, batch_size=bs))
 
                 stage[0] += 1
                 log(f'[stage {stage[0]}/{total_stages}] {args.method} (seed {seed}{osfx})', 2)
@@ -696,7 +741,7 @@ def main():
                                  method_args_for(args.method, cache,
                                                  args.method_lr, args.method_warmup),
                                  seed, args.student_steps, args.eval_every,
-                                 args.eval_iters, device, lbl))
+                                 args.eval_iters, device, lbl, batch_size=bs))
 
                 runs.append({
                     'seed': seed,
@@ -772,21 +817,23 @@ def print_sweep_report(a):
           f'(teacher/student data overlap; 1.0=same-data, 0.0=disjoint)')
     print(f'    Seeds {c["seeds"]} · student {c["student_steps"]} steps, '
           f'eval every {c["eval_every"]}')
-    print('  ' + '-' * 68)
-    print(f'    {"overlap":>7} | {"baseline":>8} | {"recipe":>8} | {"Δloss":>6} | '
-          f'{"score":>7} | overfit b/m')
-    print('  ' + '-' * 68)
+    dists = c.get('overlap_distances', {})
+    print('  ' + '-' * 74)
+    print(f'    {"overlap":>7} | {"tok-JS":>6} | {"baseline":>8} | {"recipe":>8} | '
+          f'{"Δloss":>6} | {"score":>7} | b/m')
+    print('  ' + '-' * 74)
     for ov, g in by.items():
         bb = g['baseline_best']['median'] if g['baseline_best'] else float('nan')
         mb = g['method_best']['median'] if g['method_best'] else float('nan')
         ps = g['prism_score']
         score = (f'{ps["median"]:.1f}x' + ('*' if g['any_left_censored'] else '')
                  if ps else 'n/a')
-        print(f'    {ov:>7} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
+        js = dists.get(ov, {}).get('token_js', float('nan'))
+        print(f'    {ov:>7} | {js:>6.4f} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
               f'{score:>7} | '
               f'{"Y" if g["baseline_overfits_any"] else "n"}/'
               f'{"Y" if g["method_overfits_any"] else "n"}')
-    print('  ' + '-' * 68)
+    print('  ' + '-' * 74)
     print('    Δloss = baseline_best − recipe_best (higher = recipe wins by more).')
     print('    score* = left-censored (lower bound). Read the trend down the')
     print('    overlap column: where the recipe advantage falls off as the')
