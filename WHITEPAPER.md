@@ -1,12 +1,13 @@
 # Prism: Transfer Learning at the Spectral Level
 
-**v0.1.** This version reports a result that is *attributed*: on nanoGPT
-Shakespeare, a fresh model given only the spectral geometry of a trained one
-reaches a lower validation loss, does not overfit where the baseline does, and
-gets to the baseline's best quality several times faster — and this holds when the
-learning rate is matched to the baseline, so only the spectral machinery differs.
-The earlier writeup, before that control was run, is archived at
-[`archive/v0.0/WHITEPAPER.md`](archive/v0.0/WHITEPAPER.md).
+**v0.2.** This version reports the *transfer* results: the speedup is resolved at
+~12× (median, three seeds); the head start is invariant to how much data the
+teacher and student share, including zero; it survives — slightly grows — when the
+student trains and is evaluated on a different corpus (Shakespeare teacher →
+Sherlock Holmes student); and it scales monotonically with teacher training,
+unsaturated at every size tested. Earlier versions: [`archive/v0.1/`](archive/v0.1/)
+(attribution — the matched-schedule control), [`archive/v0.0/`](archive/v0.0/)
+(before attribution).
 
 ## 1. Abstract
 
@@ -16,20 +17,24 @@ spectrum and singular vectors of its weight matrices). Standard practice discard
 the blueprint. Prism extracts it and uses it to initialize and regularize a fresh
 model.
 
-On nanoGPT Shakespeare (10.65M params), across three seeds, the Prism recipe
-reaches a best validation loss of ~1.66–1.67 versus the baseline's ~1.78, and does
-not overfit through 5,000 steps where the baseline decays to ~2.30. Critically, a
-**schedule-matched control** — the recipe run at the baseline's own learning rate,
-so the only difference is the spectral flags — reproduces the effect (best ~1.67,
-no overfitting, ~7× faster to the baseline's best). The improvement is therefore
-attributable to the spectral method, not to the learning rate the recipe happened
-to use.
+On nanoGPT Shakespeare (10.65M params, three seeds throughout): the Prism recipe
+reaches the from-scratch baseline's best quality in ~100 steps versus the
+baseline's ~1,020–1,300 — **11.8× median, a resolved measurement** — and does not
+overfit through 5,000 steps where the baseline decays from 1.78 to ~2.31. A
+schedule-matched control attributes the effect to the spectral machinery (7.0× with
+only the spectral flags toggled). Two experiments then separate *structure* from
+*content*: the early advantage is identical whether teacher and student share 100%
+or 0% of their training text (difficulty-controlled), and it persists at full
+strength when the student's data and validation set are replaced by a different
+corpus entirely. A teacher-strength sweep shows the advantage grows monotonically
+with teacher training and that a barely-trained teacher actively hurts —
+evidence the transferred geometry itself, not generic regularization pressure,
+carries the effect.
 
-Two questions remain open and bound the claim. First, all runs are *same-data*:
-teacher and student share the training split, so this does not yet distinguish
-structural transfer from content leakage — the cross-data test (§7) decides that.
-Second, the anti-overfitting has not been separated from generic regularization.
-The method is untested at production scale.
+The claims are bounded: the transfer experiments are early-window probes (100
+steps); the "far" corpus is a different author but the same language and character
+set; the spectral-vs-generic-regularization ablation is unrun; and nothing here
+exceeds 10.65M parameters.
 
 ## 2. Introduction
 
@@ -37,16 +42,19 @@ Modern networks spend their first thousands of gradient steps rediscovering
 structure that every trained model already possesses. Standard initializations
 start from isotropic noise; the optimizer must carve out the dominant singular
 directions and energy distribution that define the network's representational
-geometry. This is wasteful in two ways. The structure-discovery phase is redundant —
-converged weight matrices have highly non-random spectra and aligned singular
-vectors. And the overfitting that ends most training runs is itself *structural*:
-the weight geometry drifts away from the task-aligned subspace it should occupy.
+geometry. This is wasteful in two ways. The structure-discovery phase is
+redundant — converged weight matrices have highly non-random spectra and aligned
+singular vectors. And the overfitting that ends most training runs is itself
+*structural*: the weight geometry drifts away from the task-aligned subspace it
+should occupy.
 
 Prism transfers the *spectral organization* of a trained model — the directional
-axes and the energy envelope — while leaving learned content untouched. The
-transferred prior serves as both initialization and continuous regularizer. The
-hoped-for consequence is not merely faster convergence but the removal of the
-overfitting ceiling.
+axes and the energy envelope — while leaving learned content untouched. v0.1
+established that the resulting speedup and overfitting immunity are attributable
+to this machinery rather than to its training schedule. v0.2 asks the question
+that decides whether the method matters: is what transfers *structure* (reusable
+on new data) or *content* (a compressed echo of the teacher's corpus)? Both
+experiments built to distinguish these came back on the side of structure.
 
 ## 3. Background
 
@@ -101,124 +109,179 @@ drift out of it. It adds no storage.
 
 All three together (from `config/prism_recipe.py`): `prism_align = 0.75`,
 `prism_mod = 0.01`, `prism_mod_decay = 0.9999`, plus the imprint and directions.
-The recipe as originally tuned also set `learning_rate = 5e-4` (half the config
-default) and `warmup_iters = 50` — and §6 shows why that detail had to be
-controlled for.
+The recipe as tuned also sets `learning_rate = 5e-4` and `warmup_iters = 50`; §6.2
+is the control that shows the effect does not come from that schedule.
 
 ## 5. Experimental protocol
 
-nanoGPT Shakespeare (6 layers, 384 hidden, 10.65M params). Data is partitioned:
-80% train (for both teacher and student), 20% held-out teacher-validation, and the
-original Shakespeare validation set used only for final scoring. Teacher 2,000
-steps; students 5,000 steps, eval every 100. Three seeds (1337, 1338, 1339) on an
-NVIDIA L4. Seed and the student learning rate / warmup are configuration keys, so
-every run is reproducible and the schedule is auditable. Each run writes a full
-artifact — loss curves, git commit, GPU, argv, and whether the schedule was
-matched — to `results/`.
+nanoGPT Shakespeare (6 layers, 384 hidden, 10.65M params), NVIDIA L4, seeds 1337 /
+1338 / 1339 throughout. Two regimes:
+
+**Long-horizon runs** (§6.1–6.2): teacher 2,000 steps; students 5,000 steps (or
+1,500 with eval every 10 for the resolved-speed run), evaluated on the held-out
+Shakespeare validation set.
+
+**Wide-shallow probes** (§6.3–6.5): teacher 500 steps (2,000 for the
+teacher-sweep's largest arm); students 100–300 steps, batch 32, eval every 10–20,
+matched schedule (both arms LR 1e-3, warmup 20). Probes trade depth for breadth —
+12 conditions × 3 seeds in under an hour — and their scores are floors
+(left-censored at the eval resolution); the resolved speed number comes from the
+dense-eval long run.
+
+For the overlap experiments the corpus is cut into 100 random blocks; each arm
+receives a random half (both spanning the whole corpus — this is what removes the
+slice-difficulty confound that invalidated an earlier sliding-window design), and
+only the shared fraction varies. For the cross-domain experiment the student's
+non-shared blocks are drawn from Sherlock Holmes (Project Gutenberg #1661)
+char-encoded in Shakespeare's vocabulary, and the student is **scored on a
+validation set mirroring its own training mixture** — pure held-out Sherlock at
+zero overlap. Distributional distance is reported as the Jensen-Shannon divergence
+of token histograms (token-JS, bits).
+
+Every run writes a full artifact — loss curves, git commit, GPU, argv, schedule-
+matched flag, censoring flags — to `results/`. A number in this paper must have a
+matching committed artifact.
 
 ## 6. Results
 
-### 6.1 The recipe vs. the baseline (two learning rates)
+### 6.1 Speed and overfitting (Runs A, C)
 
-| | Baseline (LR 1e-3) | Recipe (LR 5e-4) | Recipe (LR 1e-3, matched) |
-|---|---|---|---|
-| Best validation loss | 1.782 | 1.656 | **1.671** |
-| Loss at step 5,000 | ~2.31 (overfit) | ~1.66 (stable) | ~1.67 (stable) |
-| Overfits within 5,000 steps | yes — 3/3 | no — 0/3 | no — 0/3 |
-| Steps to baseline's best | — | ≤100 (≥13×, censored) | 200 (7×, measured) |
+The baseline peaks near step 1,020–1,400 at ~1.77–1.78 and then overfits, reaching
+~2.31 by step 5,000 on every seed. The recipe reaches ~1.66 and holds through
+5,000 steps, overfitting on none. With dense evaluation the crossover is resolved:
+the recipe reaches the baseline's best at step 100–110, versus the baseline's
+1,020–1,300 — **Prism Score 11.8× median (10.2–11.9×), no censoring**
+([`recipe_20260721T142104Z.json`](results/recipe_20260721T142104Z.json)).
 
-The baseline peaks near step 1,350 at ~1.78 and then overfits, reaching ~2.31 by
-step 5,000 on every seed. The recipe reaches ~1.66–1.67 and holds, overfitting on
-none.
+### 6.2 Attribution (Run B)
 
-### 6.2 The attribution control (the point of v0.1)
+Re-run at the baseline's own learning rate and warmup, only the spectral flags
+changed (`schedule_matched: true`,
+[`recipe_20260720T230405Z.json`](results/recipe_20260720T230405Z.json)): best
+1.671 (range 1.671–1.674) vs. baseline 1.782; no overfitting on any seed (baseline
+3/3); crossover at step 200 — **7.0×**. At the same schedule the baseline fails
+under, toggling only the spectral flags recovers the effect. The improvement is
+attributable to the spectral method.
 
-The recipe's left column differs from the baseline in two ways at once: the
-spectral machinery *and* a halved learning rate. Since a too-high learning rate is
-itself a classic cause of overfitting, the confound is fatal to a naive reading:
-the whole picture might be the learning rate.
+### 6.3 Structure vs. content, within-domain (Run D)
 
-So the recipe was re-run at the baseline's own learning rate (1e-3) and warmup
-(100), with only the spectral flags changed (`schedule_matched: true` in the
-artifact, run
-[`recipe_20260720T230405Z.json`](../results/recipe_20260720T230405Z.json)). The
-effect survives:
+Twelve overlap points from 1.0 to 0.0, difficulty-controlled, 100-step students,
+matched LR ([`recipe_20260721T050203Z.json`](results/recipe_20260721T050203Z.json)):
 
-- Best validation loss **1.671** (range 1.671–1.674), vs. the baseline's 1.782.
-- **No overfitting** on any of the three seeds; the baseline overfits on all three.
-- Crosses the baseline's best quality at step **200 — a 7× speedup that is now
-  resolved**, not the censored lower bound the 5e-4 run produced (it crossed before
-  the first eval).
+**Δloss is flat — 0.565–0.587 (~23% lower loss at step 100) at every overlap,
+including fully disjoint data.** The baseline is flat at ~2.48 across the sweep
+(the difficulty control holding). The early advantage owes nothing to shared text.
 
-At the same learning rate the baseline fails at, toggling only the spectral flags
-recovers the effect. The improvement is attributable to the spectral method.
+### 6.4 Structure vs. content, cross-domain (Run E)
 
-### 6.3 What is not yet shown
+The decisive version: the student trains on progressively more Sherlock Holmes and
+is scored on its own mixture — pure Sherlock at zero overlap
+([`recipe_20260721T161208Z.json`](results/recipe_20260721T161208Z.json)):
 
-- **Structure vs. content.** All runs are same-data (§7). This shows Prism transfers
-  something real; not that it is structure rather than leakage.
-- **Spectral vs. generic regularization.** The mod wheel is a regularizer; it beats
-  a schedule-matched baseline, but has not been compared against tuned dropout /
-  weight decay. The `spectral_only` / `dirs_only` arms (exposed by the eval) and a
-  reg-matched baseline are unrun.
-- **Component attribution.** The design hypothesis — EigenTransfer for speed, the
-  Mod Wheel for anti-overfitting — has no committed ablation yet.
+| overlap | token-JS | val set | baseline | recipe | Δloss |
+|---|---|---|---|---|---|
+| 1.00 | 0.0000 | 100% Shakespeare | 2.469 | 1.878 | 0.591 |
+| 0.50 | 0.0044 | 50/50 | 2.475 | 1.882 | 0.593 |
+| 0.00 | 0.0266 | **100% Sherlock** | 2.414 | 1.786 | **0.627** |
 
-## 7. The decisive experiment (not yet run)
+**A Shakespeare teacher's geometry accelerates learning *of Sherlock* at least as
+much as it accelerates Shakespeare.** The overlap-1.0 row reproduces the base
+protocol (sanity gate); the gap grows slightly, rather than shrinking, as the
+student's data and evaluation move wholly to the far corpus. Scores are ≥9–10× at
+every overlap (censored at the probe's 10-step eval resolution — consistent with
+§6.1's resolved ~12×).
 
-Everything in §6 is same-data. To separate structure from content: extract the
-teacher's fingerprint from one half of the training data and train the student on
-the disjoint other half, where no shared content remains. If the advantage
-survives, the transfer is structural — implying every checkpoint ever trained holds
-a reusable prior nobody extracts. If it collapses, Prism is distillation with extra
-steps. This has not been run, and it is what would elevate the result from "a real
-regularization/initialization effect" to "structural transfer."
+Together, §6.3 and §6.4 close the content-leakage explanation twice: once with
+disjoint same-corpus data, once with a different corpus and a validation set that
+rewards only the new domain.
 
-## 8. Discussion
+### 6.5 The teacher-strength lever (Run F)
 
-**What appears to transfer is the *how*, not the *what*.** The student learns its
-content from scratch; only the organizational grammar of its weight matrices is
-pre-loaded — and, per §6.2, that grammar alone (not the learning rate) drives the
-effect. Whether it is genuinely content-independent is exactly what §7 tests.
+One teacher size per arm, same-data, 300-step students
+([`recipe_20260721T143246Z.json`](results/recipe_20260721T143246Z.json)):
 
-**If overfitting is removed, the scaling calculus changes.** Overfitting is what
-punishes a model too large for its data or trained too long. The recipe does not
-overfit through 5,000 steps at either learning rate; whether it *never* does is the
-endurance question. If it holds, training depth becomes a choice rather than a
-constraint.
+| teacher steps | Δloss (baseline − recipe) |
+|---|---|
+| 100 | **−0.069** (recipe *worse* than baseline) |
+| 250 | +0.088 |
+| 500 | +0.248 |
+| 1,000 | +0.377 |
+| 2,000 | +0.451 — unsaturated |
+
+The advantage is monotonic in teacher training and had not saturated at the
+largest teacher tested. The negative cell is as informative as the trend: a
+barely-trained teacher's geometry is noise imprinted with authority, and it
+actively hurts. This dependence on the *quality of the transferred geometry* is
+indirect evidence that the spectral target, not generic regularization pressure,
+carries the effect — a generic regularizer has no teacher to be wrong about.
+
+### 6.6 What is not yet shown
+
+- §6.3–6.4 are 100-step probes: they establish the head start, not the full
+  no-overfitting arc on far data.
+- Sherlock Holmes is a different author but the same language and character set
+  (token-JS 0.027). A genuinely far modality is untested.
+- The direct spectral-vs-generic-regularization control (tuned dropout / weight
+  decay) is unrun; §6.5 is suggestive, not a substitute.
+- Component attribution (`spectral_only` / `dirs_only`) has no committed artifact.
+
+## 7. Discussion
+
+**What transfers is the geometry of a trained transformer, and it is largely
+data-independent within the modality.** That is the strong reading the v0.2
+experiments license: the head start is invariant to shared content (§6.3),
+portable to a corpus the teacher never saw — measured on that corpus (§6.4) — and
+proportional to how converged the teacher's geometry is (§6.5). The student is not
+receiving a compressed Shakespeare; it is receiving *how a char-level transformer
+of this architecture organizes itself*, which turns out to be most of what the
+first thousand steps of training laboriously rediscover.
+
+**The practical consequence** is `prism_accelerate.py`: any trained checkpoint of
+an architecture holds a reusable prior for training fresh models of that
+architecture — on the same data, on new data, or (within the measured range) on a
+different corpus — with the single sharp edge that the teacher must itself be
+trained past the point where its geometry means something.
+
+**If overfitting is removed, the scaling calculus changes.** The recipe does not
+overfit through 5,000 steps at either learning rate; whether it *never* does is
+the endurance question, and whether the immunity transfers cross-domain is open.
 
 **Compression tiers.** 128 bytes (spectral shape) → ~500 MB directional matrices.
-The spectral shape alone is the compact tier; the directional alignment is large.
-Per-tier attribution is unverified (the ablation is unrun), so the split of credit
-between them is a hypothesis. Directional compression is an open problem.
+Per-tier attribution is unverified; directional compression, and the projection
+scheme that would allow cross-*size* transfer, are open problems — the latter being
+the payoff weight-copying cannot reach.
 
-## 9. Limitations
+## 8. Limitations
 
-- Same-data only; the cross-data test (§7) is unrun, so content leakage is not
-  excluded.
-- No regularization-matched control, so "the spectral structure prevents
-  overfitting" (vs. generic regularization) is not isolated.
-- Two shared learning rates, not a full per-arm sweep.
-- Shakespeare only (~1M tokens, 10.65M params); untested at scale.
-- Requires a teacher checkpoint. Transfer learning, not magic.
-- The "128 bytes" headline is the spectrum; the directions are ~500 MB uncompressed.
+- The transfer results (§6.3–6.4) are early-window (100-step) probes, 3 seeds.
+- "Cross-domain" means a different author in the same language and character set.
+- No regularization-matched control; no component ablation artifacts.
+- Two shared learning rates, not a per-arm-best sweep.
+- ~1M-token corpora, 10.65M params; untested at scale.
+- Requires a trained teacher of the same architecture. Transfer learning, not
+  magic — and a weak teacher is worse than none (§6.5).
 
-## 10. Future work
+## 9. Future work
 
-- **Cross-data test (§7)** — structure vs. content. Comes first.
-- **Endurance run** — recipe to 20k–50k steps; find where, if ever, it overfits.
-- **Ablations** — `spectral_only` / `dirs_only` and a reg-matched baseline.
-- **Scale** — GPT-2 124M on OpenWebText.
+- **Truly far modality** — source code or another language; find where structural
+  transfer degrades. Geometric-alignment refinements (Grassmann direction pairing,
+  top-k subspace transfer, CKA regularization — under evaluation on the
+  collaboration branch) get their shot where the plain recipe weakens.
+- **Long-horizon far-domain** — does overfitting immunity transfer too?
+- **Endurance** — 20k–50k steps.
+- **Ablations** — `spectral_only` / `dirs_only`, reg-matched baseline.
+- **Cross-size transfer** — spectrum interpolates trivially; directions need a
+  projection scheme.
 
-## 11. Conclusion
+## 10. Conclusion
 
-Prism transfers the spectral organization of a trained model — the directions that
-matter and the energy that flows through them — into a fresh one. On nanoGPT
-Shakespeare it reaches a lower loss than the baseline and does not overfit where the
-baseline collapses, and this survives a schedule-matched control, so the effect is
-the spectral method rather than the learning rate. That is a modest, real, and now
-*attributed* result. Whether what transfers is structure rather than content — the
-claim that would make it matter — is the next experiment, not this one.
+Prism transfers the spectral organization of a trained model into a fresh one. On
+nanoGPT Shakespeare that is worth ~12× in steps-to-quality (7× under the strictest
+attribution control), removes overfitting over the horizons tested, does not
+depend on the student sharing any data with the teacher, survives wholesale
+replacement of the student's corpus, and grows with the quality of the teacher's
+geometry. The claims stop at 10.65M parameters and one modality — but within that
+scope, the question v0.1 left open is answered: what transfers is structure.
 
 Code and committed results:
 [github.com/timepointai/nanogpt-prism-shakespeare](https://github.com/timepointai/nanogpt-prism-shakespeare)

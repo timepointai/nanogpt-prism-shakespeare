@@ -2,6 +2,19 @@
 
 Superseded documentation, kept verbatim for the record. Not maintained.
 
+## v0.1 — attribution, before the transfer results
+
+[`v0.1/`](v0.1/) holds the docs as they stood after the learning-rate confound was
+ruled out (the matched-LR control, ~7×) but **before the probe campaign that
+followed**: the un-censored speed measurement (11.8× median, resolved — retiring
+v0.1's "≥13–14×, censored" floor language), the difficulty-controlled overlap sweep
+(the head start is flat across teacher/student data overlap — content-independent),
+the cross-domain test (a Shakespeare teacher accelerates learning *of Sherlock
+Holmes*, scored on Sherlock — domain-independent), and the teacher-strength sweep
+(the advantage grows monotonically with teacher training and is unsaturated; a weak
+teacher actively hurts). v0.1's "what's next" list — the cross-data test above
+all — is what v0.2 ran. See the current top-level [README.md](../README.md).
+
 ## v0.0 — before attribution
 
 [`v0.0/`](v0.0/) holds `README.md`, `WHITEPAPER.md`, and `RESULTS.md` as they stood

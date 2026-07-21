@@ -1,111 +1,164 @@
-# Prism × nanoGPT — Results (v0.1)
+# Prism × nanoGPT — Results (v0.2)
 
-Two committed runs, three seeds each, on an NVIDIA L4. Every number below is
-reproducible from an artifact in [`results/`](results/). The earlier writeup, from
-before the confound was ruled out, is archived at
-[`archive/v0.0/RESULTS.md`](archive/v0.0/RESULTS.md).
+Seven committed runs, three seeds each, on an NVIDIA L4. Every number below is
+reproducible from an artifact in [`results/`](results/). Earlier writeups:
+[`archive/v0.1/RESULTS.md`](archive/v0.1/RESULTS.md) (the attribution pass),
+[`archive/v0.0/RESULTS.md`](archive/v0.0/RESULTS.md) (before attribution).
 
-## The two runs
+## The runs
 
-**Run A — the recipe as tuned** ([`recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json)):
-recipe at LR 5e-4 vs. baseline at the config default LR 1e-3.
+| # | run | artifact |
+|---|---|---|
+| A | Recipe as tuned (LR 5e-4) vs. baseline (LR 1e-3), 5,000 steps | [`recipe_20260718T002717Z.json`](results/recipe_20260718T002717Z.json) |
+| B | **Attribution control**: recipe at the baseline's own LR, 5,000 steps | [`recipe_20260720T230405Z.json`](results/recipe_20260720T230405Z.json) |
+| C | **Un-censored speed**: tuned recipe, dense eval (every 10), 1,500 steps | [`recipe_20260721T142104Z.json`](results/recipe_20260721T142104Z.json) |
+| D | **Overlap probe**: 12 overlaps × 3 seeds, random blocks, matched LR, 100 steps | [`recipe_20260721T050203Z.json`](results/recipe_20260721T050203Z.json) |
+| E | **Cross-domain**: far corpus (Sherlock), student scored on its own data | [`recipe_20260721T161208Z.json`](results/recipe_20260721T161208Z.json) |
+| F | **Teacher-strength sweep**: teachers 100→2,000 steps, 300-step students | [`recipe_20260721T143246Z.json`](results/recipe_20260721T143246Z.json) |
+| — | Sliding-window overlap sweep — **record only, interpretation retired** (difficulty confound; superseded by D) | [`recipe_20260721T022342Z.json`](results/recipe_20260721T022342Z.json) |
+| — | Far-corpus sweep scored on Shakespeare val — superseded by E (see scope note in [`results/README.md`](results/README.md)) | [`recipe_20260721T153218Z.json`](results/recipe_20260721T153218Z.json) |
 
-**Run B — the attribution control** ([`recipe_20260720T230405Z.json`](results/recipe_20260720T230405Z.json)):
-recipe at LR **1e-3**, matched to the baseline. `schedule_matched: true` — the two
-arms differ by *nothing but the spectral flags*.
+## 1. Speed: ~12×, resolved (Run C)
 
-Teacher 2,000 steps; students 5,000 steps, eval every 100, held-out Shakespeare
-validation set.
+The tuned recipe's speed was left-censored in Run A (it crossed the baseline's best
+before the first eval at step 100, so "≥13–14×" was a floor with coarse
+resolution). Run C was built to resolve it: eval every 10 steps, 1,500-step
+horizon.
+
+| seed | baseline best @step | recipe reaches it @step | Prism Score |
+|---|---|---|---|
+| 1337 | 1.7663 @1,020 | @100 | 10.2× |
+| 1338 | 1.7784 @1,190 | @100 | 11.9× |
+| 1339 | 1.7674 @1,300 | @110 | 11.8× |
+
+**Median 11.8× (10.2–11.9×), `left_censored: false` on all seeds.** The earlier
+"≥13–14×" language is retired — the two runs don't conflict (different eval
+resolution and horizon place the baseline's best differently), but the resolved
+number is the number: **~12× as tuned, 7× at matched LR (Run B, below)**.
+
+## 2. Attribution: it's the method, not the schedule (Runs A + B)
 
 | | Baseline (LR 1e-3) | Recipe (LR 5e-4) | Recipe (LR 1e-3, matched) |
 |---|---|---|---|
 | Best val loss (median of 3) | 1.782 | 1.656 | **1.671** |
-| &nbsp;&nbsp;range across seeds | 1.781–1.783 | 1.655–1.658 | 1.671–1.674 |
 | Val loss @ step 5,000 | ~2.31 (overfit) | ~1.66 (stable) | ~1.67 (stable) |
 | Overfits within 5,000 steps | yes — 3/3 | no — 0/3 | no — 0/3 |
-| Prism Score (steps to baseline's best) | — | ≥13–14× (left-censored) | **7× (median; measured, not censored)** |
+| Prism Score | — | 11.8× (from Run C) | **7.0× (6.5–7.0×)** |
 
-Per seed, matched-LR run (Run B):
+Run B holds the learning rate and warmup identical to the baseline
+(`schedule_matched: true`) and toggles only the spectral flags. The effect
+survives on every seed: lower best loss, no overfitting, 7× to the baseline's
+best. The "maybe it was just the lower learning rate" explanation is closed.
 
-| seed | baseline best @step | baseline @5000 | recipe best @step | recipe @5000 | Prism Score |
+## 3. Structure, not content (Run D)
+
+The teacher/student overlap dial, difficulty-controlled: the corpus is cut into
+100 random blocks; each arm gets a random half (both spanning the whole corpus, so
+neither arm gets an "easier" slice); only the *shared fraction* varies. 12 overlap
+points from 1.0 (identical data) to 0.0 (fully disjoint), 3 seeds each, 100-step
+students, matched LR.
+
+**The early advantage is flat: Δloss 0.565–0.587 (~23% lower loss at step 100) at
+overlap 1.0, at 0.0, and everywhere between.** Baseline flat at ~2.48 across the
+sweep (the difficulty control working). Nothing the student gains depends on
+sharing text with the teacher.
+
+(An earlier sliding-window version of this sweep showed the advantage *declining*
+with overlap — that was a confound: window position correlated with text
+difficulty, the baseline drifted 1.88→1.55 across the sweep. The artifact stays
+committed as a record; its interpretation is retired.)
+
+## 4. Cross-domain: the head start survives a change of corpus (Run E)
+
+The student's non-shared blocks come from **Sherlock Holmes** (`data/far.txt`,
+Project Gutenberg #1661), char-encoded in Shakespeare's vocabulary, and — the part
+that makes the test decisive — the student is **scored on a validation set drawn
+from its own training mixture** (`far_val: true`): pure held-out Shakespeare at
+overlap 1.0, pure held-out Sherlock at overlap 0.0. Matched LR, 3 seeds, 100-step
+students. The overlap-1.0 row reproduces the base protocol exactly (the sanity
+gate).
+
+| overlap | token-JS | val set | baseline | recipe | Δloss |
 |---|---|---|---|---|---|
-| 1337 | 1.7822 @1400 | 2.3075 | 1.6709 @5000 | 1.6709 | 7.0× (hit @200) |
-| 1338 | 1.7832 @1400 | 2.3062 | 1.6742 @5000 | 1.6742 | 7.0× (hit @200) |
-| 1339 | 1.7806 @1300 | 2.3341 | 1.6712 @4700 | 1.6809 | 6.5× (hit @200) |
+| 1.00 | 0.0000 | 100% Shakespeare | 2.469 | 1.878 | 0.591 |
+| 0.75 | 0.0008 | 76% Shakespeare | 2.487 | 1.898 | 0.589 |
+| 0.50 | 0.0044 | 50/50 | 2.475 | 1.882 | 0.593 |
+| 0.25 | 0.0121 | 32% Shakespeare | 2.464 | 1.851 | 0.613 |
+| 0.00 | 0.0266 | **100% Sherlock** | 2.414 | 1.786 | **0.627** |
 
-## What this establishes
+**A Shakespeare teacher's geometry accelerates learning of Sherlock at least as
+much as it accelerates Shakespeare.** The gap does not shrink with distance — it
+grows slightly. Prism Scores are ≥9–10× at every overlap (left-censored at this
+probe's 10-step resolution — consistent with Run C's resolved ~12×). Combined with
+Run D, this closes the content-leakage explanation twice over: the transfer is
+structural, and the structure is portable across corpora.
 
-**The effect is attributable to the spectral method, not the learning rate.** Run B
-holds the learning rate identical to the baseline and toggles only the spectral
-flags. At that matched schedule, where the baseline overfits and decays to ~2.31,
-the recipe reaches ~1.67 and holds, and crosses the baseline's best quality ~7×
-faster. So the "maybe it was just the lower learning rate" explanation is closed.
+An earlier version of this run scored all students on the *Shakespeare* val set —
+which conflates accelerated learning of the new domain with retention of the
+teacher's. That artifact ([`…T153218Z`](results/recipe_20260721T153218Z.json)) is
+kept with a scope note; Run E is the corrected protocol.
 
-Two supporting points:
+## 5. The lever: teacher strength (Run F)
 
-- **Two learning rates both favor Prism.** The recipe is slightly better at 5e-4
-  (1.656) than at 1e-3 (1.671), so 5e-4 is mildly better-tuned for it — but it wins
-  at both, which is stronger than a single operating point.
-- **The speed number is now measured.** At 5e-4 the recipe crossed the baseline's
-  best before the first eval (step 100), so the score was a left-censored lower
-  bound. At 1e-3 the crossover moved to step 200, so the eval resolved it: 7×, a
-  real measurement.
+Same-data probe, 300-step students, one teacher size per arm:
+
+| teacher steps | baseline best | recipe best | Δloss | score |
+|---|---|---|---|---|
+| 100 | 2.180 | 2.249 | **−0.069** | never reached |
+| 250 | 2.180 | 2.092 | 0.088 | 2.3× |
+| 500 | 2.180 | 1.932 | 0.248 | 7.5× |
+| 1,000 | 2.180 | 1.804 | 0.377 | 7.5× |
+| 2,000 | 2.180 | 1.729 | 0.451 | 7.5× |
+
+**Monotonic and unsaturated at 2,000 teacher steps.** And the sharp edge: a
+barely-trained teacher is *actively worse than random init* — its geometry is
+noise being imprinted with authority. If you use `prism_accelerate.py`, use a
+trained teacher.
+
+This is also indirect evidence *for* the spectral mechanism: the effect tracks the
+quality of the teacher's geometry, which a generic regularizer has no access to.
 
 ## What this does NOT establish
 
-- **Structure vs. content.** Both runs are same-data (teacher and student share the
-  80% split). This shows Prism transfers something real and useful; it does not show
-  that what transfers is *structure* rather than the teacher leaking *content*. Only
-  the cross-data test can (below).
-- **Spectral vs. generic regularization.** The mod wheel is a regularizer. We've
-  shown it beats a schedule-matched baseline, but not that the *spectral* nature
-  specifically (vs. tuned dropout / weight decay / early stopping) is what prevents
-  overfitting. The `spectral_only` / `dirs_only` arms and a reg-matched baseline
-  address this.
-- **A full LR sweep.** Two shared operating points is not the gold standard of
-  comparing each arm at *its own best* learning rate. The matched-LR comparison is
-  the decisive one for attribution, but a small sweep would make it airtight.
-- **Scale.** Shakespeare only, 10.65M params.
+- **Early-window scope.** Runs D and E measure the head start at step 100
+  (init-dominated). They prove the transfer is structural and domain-portable;
+  they do not show the full no-overfitting arc to convergence on far data (Runs
+  A–C are long-horizon but same-data).
+- **Sherlock is still English prose** (token-JS 0.027, same character set). A
+  genuinely different modality — code, another language — is untested.
+- **Spectral vs. generic regularization** is still not isolated by a direct
+  control (tuned dropout / weight decay). Run F's teacher-dependence is
+  suggestive, not a substitute.
+- **Two shared learning rates, not a per-arm-best sweep.**
+- **Scale.** 10.65M params, ~1M-token corpora.
+
+## The next experiments, in order
+
+1. **Truly far modality** — the far-corpus arm pointed at source code or another
+   language (token-JS ≫ 0.03); find where structural transfer degrades.
+2. **Long-horizon far-domain** — the 0%-overlap Sherlock student to convergence:
+   does no-overfitting transfer across domains too?
+3. **Endurance** — the recipe to 20k–50k steps.
+4. **Ablations** — `spectral_only` / `dirs_only` / reg-matched baseline.
+5. **Cross-size transfer** — spectrum interpolates; directions need a projection.
 
 ## Reproduce it
 
 ```bash
 cd src
 pip install torch numpy transformers tiktoken datasets
-python prism_eval.py                                      # Run A: recipe @ 5e-4
-python prism_eval.py --method_lr=1e-3 --method_warmup=100 # Run B: matched — only spectral flags differ
-python prism_eval.py --report                             # reprint the last artifact
+python prism_eval.py --student_steps=1500 --eval_every=10 --eval_iters=50   # Run C
+python prism_eval.py --method_lr=1e-3 --method_warmup=100                   # Run B
+python prism_eval.py --teacher_steps=500 --student_steps=100 --eval_every=10 \
+  --eval_iters=40 --batch_size=32 --method_lr=1e-3 --method_warmup=20 \
+  --baseline_warmup=20 \
+  --overlap=1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.05,0.0               # Run D
+python prism_eval.py --teacher_sweep=100,250,500,1000,2000 \
+  --student_steps=300 --eval_every=20 --eval_iters=40 --batch_size=32       # Run F
+# Run E needs the leo-test branch (--far_corpus=data/far.txt --far_val)
+python prism_eval.py --report                                               # reprint last artifact
 ```
 
-The eval is stepwise and resumable (each seed's stages bank to disk), records
-provenance and whether the schedule was matched, and refuses to score a partial or
-crashed run. A number in these docs must have a matching `results/*.json`.
-
-## The next experiments, in order
-
-1. **Cross-data** — fingerprint the teacher on one half of the training data, train
-   the student on the disjoint other half. If the advantage survives, the transfer
-   is structural. If it collapses, Prism is distillation with extra steps. The one
-   that decides how important this is.
-2. **Endurance** — take the recipe well past 5,000 steps (20k–50k) to find where, if
-   ever, it finally overfits. Either it holds (the ceiling is genuinely removed) or
-   it breaks at a measurable step *N*.
-3. **Ablations** — `spectral_only`, `dirs_only`, and a regularization-matched
-   baseline, to separate the spectral contribution from generic regularization.
-4. **Scale** — GPT-2 124M on OpenWebText.
-
-## How the method works
-
-**Spectral Imprint** — SVD each teacher weight matrix, group by type, average the
-singular-value distributions per group, compress each to 8 DCT coefficients
-(~128 bytes total), reshape the student's spectrum to match.
-
-**EigenTransfer** — blend the student's singular vectors 75% toward the teacher's,
-re-orthogonalize.
-
-**Mod Wheel** — after each optimizer step, `W ← (1 − s)·W + s·W_target`, with
-`s = 0.01` decaying by `0.9999` per step. A continuous, zero-storage spectral
-regularizer.
-
-The 128-byte figure is the spectrum only; the directional matrices (U, V) are
-~500 MB uncompressed and compressing them is an open problem.
+The eval is stepwise and resumable, records provenance and whether the schedule
+was matched, and refuses to score a partial or crashed run. **A number in these
+docs must have a matching `results/*.json`.**

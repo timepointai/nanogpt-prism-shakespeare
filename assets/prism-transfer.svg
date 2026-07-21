@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <!-- Data: results/recipe_20260721T161208Z.json (left) and
+       results/recipe_20260721T143246Z.json (right). Medians of 3 seeds. -->
+
+  <text x="480" y="24" text-anchor="middle" font-size="17" font-weight="700" fill="#8b8b96">The head start survives a domain change — and grows with the teacher</text>
+
+  <!-- ══════════ Panel A: cross-domain transfer ══════════ -->
+  <text x="275" y="48" text-anchor="middle" font-size="12.5" font-weight="600" fill="#8b8b96">Val loss @ step 100 vs. teacher/student overlap · student scored on its OWN data</text>
+
+  <!-- axes -->
+  <line x1="70" y1="60" x2="70" y2="340" stroke="#9a9aa4" stroke-width="1"/>
+  <line x1="70" y1="340" x2="480" y2="340" stroke="#9a9aa4" stroke-width="1"/>
+  <!-- y = 330 - (loss - 1.7) * 311.1  (loss 2.6 at top, 1.7 at bottom; lower is better) -->
+  <g font-size="10" fill="#9a9aa4" text-anchor="end">
+    <text x="64" y="54">2.6</text>
+    <text x="64" y="147">2.3</text>
+    <text x="64" y="241">2.0</text>
+    <text x="64" y="334">1.7</text>
+  </g>
+  <g stroke="#9a9aa4" stroke-width="0.5" stroke-dasharray="2,4" opacity="0.5">
+    <line x1="70" y1="143" x2="480" y2="143"/>
+    <line x1="70" y1="237" x2="480" y2="237"/>
+  </g>
+  <!-- x labels: overlap + token-JS -->
+  <g font-size="10.5" fill="#9a9aa4" text-anchor="middle">
+    <text x="100" y="356">1.00</text>
+    <text x="190" y="356">0.75</text>
+    <text x="280" y="356">0.50</text>
+    <text x="370" y="356">0.25</text>
+    <text x="460" y="356">0.00</text>
+    <text x="100" y="371" font-size="9">JS 0</text>
+    <text x="190" y="371" font-size="9">.0008</text>
+    <text x="280" y="371" font-size="9">.0044</text>
+    <text x="370" y="371" font-size="9">.0121</text>
+    <text x="460" y="371" font-size="9">.0266</text>
+  </g>
+  <text x="275" y="390" text-anchor="middle" font-size="10.5" fill="#9a9aa4">overlap with the teacher's data (token-JS distance below)</text>
+  <text x="275" y="408" text-anchor="middle" font-size="10.5" fill="#9a9aa4">← all Shakespeare · · · student trains AND is scored on Sherlock Holmes →</text>
+
+  <!-- gap shading between the curves -->
+  <path d="M 100,90.7 L 190,85.1 L 280,89.0 L 370,92.3 L 460,108.0
+           L 460,303.2 L 370,283.0 L 280,273.4 L 190,268.4 L 100,274.5 Z"
+        fill="#0d9488" opacity="0.07"/>
+
+  <!-- baseline (pink) -->
+  <polyline points="100,90.7 190,85.1 280,89.0 370,92.3 460,108.0"
+            fill="none" stroke="#db2777" stroke-width="2.5"/>
+  <g fill="#db2777">
+    <circle cx="100" cy="90.7" r="3.5"/><circle cx="190" cy="85.1" r="3.5"/>
+    <circle cx="280" cy="89.0" r="3.5"/><circle cx="370" cy="92.3" r="3.5"/>
+    <circle cx="460" cy="108.0" r="3.5"/>
+  </g>
+  <text x="160" y="74" font-size="11.5" font-weight="600" fill="#db2777">from-scratch baseline ~2.47</text>
+
+  <!-- recipe (teal) -->
+  <polyline points="100,274.5 190,268.4 280,273.4 370,283.0 460,303.2"
+            fill="none" stroke="#0d9488" stroke-width="2.5"/>
+  <g fill="#0d9488">
+    <circle cx="100" cy="274.5" r="3.5"/><circle cx="190" cy="268.4" r="3.5"/>
+    <circle cx="280" cy="273.4" r="3.5"/><circle cx="370" cy="283.0" r="3.5"/>
+    <circle cx="460" cy="303.2" r="3.5"/>
+  </g>
+  <text x="160" y="322" font-size="11.5" font-weight="600" fill="#0d9488">Prism recipe ~1.88 → 1.79</text>
+
+  <!-- delta annotations -->
+  <g font-size="10.5" font-weight="600" fill="#8b8b96" text-anchor="middle">
+    <text x="100" y="188">Δ 0.591</text>
+    <text x="460" y="212">Δ 0.627</text>
+  </g>
+
+  <!-- ══════════ Panel B: teacher-strength lever ══════════ -->
+  <text x="745" y="48" text-anchor="middle" font-size="12.5" font-weight="600" fill="#8b8b96">The lever: advantage vs. teacher training (same-data probe)</text>
+
+  <line x1="560" y1="60" x2="560" y2="340" stroke="#9a9aa4" stroke-width="1"/>
+  <line x1="560" y1="340" x2="930" y2="340" stroke="#9a9aa4" stroke-width="1"/>
+  <!-- y ticks: Δloss -0.1 .. 0.5 ; y = 330 - (d+0.1)/0.6*280, axis floor 340 -->
+  <g font-size="10" fill="#9a9aa4" text-anchor="end">
+    <text x="554" y="54">+0.5</text>
+    <text x="554" y="147">+0.3</text>
+    <text x="554" y="241">+0.1</text>
+    <text x="554" y="287">0</text>
+    <text x="554" y="334">−0.1</text>
+  </g>
+  <!-- zero line -->
+  <line x1="560" y1="283.3" x2="930" y2="283.3" stroke="#9a9aa4" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <text x="925" y="278" text-anchor="end" font-size="9.5" fill="#9a9aa4">no advantage</text>
+
+  <!-- x labels (log spacing) -->
+  <g font-size="10.5" fill="#9a9aa4" text-anchor="middle">
+    <text x="590" y="356">100</text>
+    <text x="685" y="356">250</text>
+    <text x="757" y="356">500</text>
+    <text x="828" y="356">1,000</text>
+    <text x="900" y="356">2,000</text>
+  </g>
+  <text x="745" y="376" text-anchor="middle" font-size="10.5" fill="#9a9aa4">teacher training steps (log scale)</text>
+
+  <!-- curve -->
+  <polyline points="590,315.5 685,242.3 757,167.6 828,107.4 900,72.9"
+            fill="none" stroke="#0d9488" stroke-width="2.5"/>
+  <g fill="#0d9488">
+    <circle cx="685" cy="242.3" r="3.5"/><circle cx="757" cy="167.6" r="3.5"/>
+    <circle cx="828" cy="107.4" r="3.5"/><circle cx="900" cy="72.9" r="3.5"/>
+  </g>
+  <circle cx="590" cy="315.5" r="3.5" fill="#db2777"/>
+
+  <g font-size="10.5" fill="#8b8b96">
+    <text x="600" y="330" fill="#db2777" font-weight="600">a weak teacher hurts (−0.069)</text>
+    <text x="893" y="57" text-anchor="end" font-weight="600">+0.451 and still climbing —</text>
+    <text x="893" y="70" text-anchor="end" font-weight="600">unsaturated at 2,000</text>
+  </g>
+  <text x="745" y="408" text-anchor="middle" font-size="10.5" fill="#9a9aa4">Δloss = baseline best − recipe best at step 300 · 3 seeds · medians</text>
+
+  <text x="480" y="426" text-anchor="middle" font-size="9.5" fill="#9a9aa4">nanoGPT Shakespeare char, 10.65M params · matched LR (left) · committed artifacts: recipe_20260721T161208Z.json, recipe_20260721T143246Z.json</text>
+</svg>
