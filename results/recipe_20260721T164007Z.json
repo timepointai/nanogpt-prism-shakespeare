@@ -1,0 +1,1122 @@
+{
+  "schema": "prism-eval/1",
+  "partial": false,
+  "run_key": "recipe_t500_s100_e10_i40_seeds1337-1338-1339_mlr1e-3mw20_blrdefbw20_ov1-0.75-0.5-0.25-0_ali128_farfar.txt_far1",
+  "seeds_requested": [
+    1337,
+    1338,
+    1339
+  ],
+  "seeds_done": [
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339
+  ],
+  "provenance": {
+    "created_utc": "2026-07-21T16:50:47.072996+00:00",
+    "git_commit": "14ee9c126fdf0cb63c77520bd1a4d01b8854ed23",
+    "git_dirty": true,
+    "python": "3.11.12",
+    "argv": [
+      "--teacher_steps=500",
+      "--student_steps=100",
+      "--eval_every=10",
+      "--eval_iters=40",
+      "--batch_size=32",
+      "--method_lr=1e-3",
+      "--method_warmup=20",
+      "--baseline_warmup=20",
+      "--overlap=1.0,0.75,0.5,0.25,0.0",
+      "--far_corpus=data/far.txt",
+      "--far_val",
+      "--align_topk=128"
+    ],
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA L4"
+  },
+  "config": {
+    "method": "recipe",
+    "teacher_steps": 500,
+    "student_steps": 100,
+    "eval_every": 10,
+    "eval_iters": 40,
+    "seeds": [
+      1337,
+      1338,
+      1339
+    ],
+    "device": "cuda",
+    "overlaps": [
+      1.0,
+      0.75,
+      0.5,
+      0.25,
+      0.0
+    ],
+    "overlap_distances": {
+      "1": {
+        "overlap_requested": 1.0,
+        "overlap_realized": 1.0,
+        "shared_blocks": 50,
+        "blocks_per_arm": 50,
+        "far_corpus": "far.txt",
+        "far_val": true,
+        "token_js": 0.0,
+        "val_mix": {
+          "shakespeare_tokens": 111540,
+          "far_tokens": 0
+        }
+      },
+      "0.75": {
+        "overlap_requested": 0.75,
+        "overlap_realized": 0.76,
+        "shared_blocks": 38,
+        "blocks_per_arm": 50,
+        "far_corpus": "far.txt",
+        "far_val": true,
+        "token_js": 0.00083,
+        "val_mix": {
+          "shakespeare_tokens": 84770,
+          "far_tokens": 26770
+        }
+      },
+      "0.5": {
+        "overlap_requested": 0.5,
+        "overlap_realized": 0.5,
+        "shared_blocks": 25,
+        "blocks_per_arm": 50,
+        "far_corpus": "far.txt",
+        "far_val": true,
+        "token_js": 0.004396,
+        "val_mix": {
+          "shakespeare_tokens": 55770,
+          "far_tokens": 55493
+        }
+      },
+      "0.25": {
+        "overlap_requested": 0.25,
+        "overlap_realized": 0.24,
+        "shared_blocks": 12,
+        "blocks_per_arm": 50,
+        "far_corpus": "far.txt",
+        "far_val": true,
+        "token_js": 0.012139,
+        "val_mix": {
+          "shakespeare_tokens": 26770,
+          "far_tokens": 55493
+        }
+      },
+      "0": {
+        "overlap_requested": 0.0,
+        "overlap_realized": 0.0,
+        "shared_blocks": 0,
+        "blocks_per_arm": 50,
+        "far_corpus": "far.txt",
+        "far_val": true,
+        "token_js": 0.026642,
+        "val_mix": {
+          "shakespeare_tokens": 0,
+          "far_tokens": 55493
+        }
+      }
+    },
+    "batch_size": 32,
+    "teacher_data_equals_student_data": false,
+    "method_lr": "1e-3",
+    "method_warmup": 20,
+    "baseline_lr": null,
+    "baseline_warmup": 20,
+    "schedule_matched": true,
+    "n_dct": 8,
+    "method_knobs": {
+      "align_topk": 128,
+      "far_corpus": "far.txt",
+      "far_val": 1
+    },
+    "far_corpus": "data/far.txt",
+    "far_val": true
+  },
+  "runs": [
+    {
+      "seed": 1337,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9172,
+          "20": 2.6166,
+          "30": 2.5477,
+          "40": 2.5238,
+          "50": 2.4954,
+          "60": 2.5041,
+          "70": 2.5037,
+          "80": 2.484,
+          "90": 2.4733,
+          "100": 2.4565
+        },
+        "best": 2.4565,
+        "best_step": 100,
+        "at_end": 2.4565,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8903,
+          "10": 2.4916,
+          "20": 2.3812,
+          "30": 2.205,
+          "40": 2.1327,
+          "50": 2.0239,
+          "60": 2.0256,
+          "70": 1.9577,
+          "80": 1.9386,
+          "90": 1.9409,
+          "100": 1.9287
+        },
+        "best": 1.9287,
+        "best_step": 100,
+        "at_end": 1.9287,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4565,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9433,
+          "20": 2.6242,
+          "30": 2.5818,
+          "40": 2.5234,
+          "50": 2.5051,
+          "60": 2.5024,
+          "70": 2.5065,
+          "80": 2.5117,
+          "90": 2.4778,
+          "100": 2.4693
+        },
+        "best": 2.4693,
+        "best_step": 100,
+        "at_end": 2.4693,
+        "wall_sec": 19.7,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.906,
+          "10": 2.4805,
+          "20": 2.3542,
+          "30": 2.176,
+          "40": 2.0638,
+          "50": 2.0126,
+          "60": 1.9937,
+          "70": 1.9596,
+          "80": 1.9474,
+          "90": 1.9141,
+          "100": 1.9247
+        },
+        "best": 1.9141,
+        "best_step": 90,
+        "at_end": 1.9247,
+        "wall_sec": 22.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4693,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8905,
+          "20": 2.6082,
+          "30": 2.5571,
+          "40": 2.5162,
+          "50": 2.5081,
+          "60": 2.4894,
+          "70": 2.5036,
+          "80": 2.4916,
+          "90": 2.4839,
+          "100": 2.477
+        },
+        "best": 2.477,
+        "best_step": 100,
+        "at_end": 2.477,
+        "wall_sec": 19.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9454,
+          "10": 2.4696,
+          "20": 2.381,
+          "30": 2.201,
+          "40": 2.1052,
+          "50": 2.0287,
+          "60": 2.002,
+          "70": 1.9446,
+          "80": 1.9632,
+          "90": 1.9443,
+          "100": 1.9276
+        },
+        "best": 1.9276,
+        "best_step": 100,
+        "at_end": 1.9276,
+        "wall_sec": 22.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.477,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.75,
+      "baseline": {
+        "curve": {
+          "0": 4.2879,
+          "10": 2.9797,
+          "20": 2.6202,
+          "30": 2.5589,
+          "40": 2.5334,
+          "50": 2.5097,
+          "60": 2.5067,
+          "70": 2.4973,
+          "80": 2.5079,
+          "90": 2.4849,
+          "100": 2.4711
+        },
+        "best": 2.4711,
+        "best_step": 100,
+        "at_end": 2.4711,
+        "wall_sec": 19.6,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8969,
+          "10": 2.4825,
+          "20": 2.37,
+          "30": 2.2191,
+          "40": 2.1444,
+          "50": 2.0469,
+          "60": 2.0228,
+          "70": 1.9684,
+          "80": 1.9659,
+          "90": 1.9454,
+          "100": 1.9415
+        },
+        "best": 1.9415,
+        "best_step": 100,
+        "at_end": 1.9415,
+        "wall_sec": 22.5,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4711,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.75,
+      "baseline": {
+        "curve": {
+          "0": 4.2299,
+          "10": 3.0015,
+          "20": 2.674,
+          "30": 2.5808,
+          "40": 2.5518,
+          "50": 2.5161,
+          "60": 2.513,
+          "70": 2.5085,
+          "80": 2.5095,
+          "90": 2.4948,
+          "100": 2.4873
+        },
+        "best": 2.4873,
+        "best_step": 100,
+        "at_end": 2.4873,
+        "wall_sec": 20.2,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9127,
+          "10": 2.4901,
+          "20": 2.3539,
+          "30": 2.1959,
+          "40": 2.0878,
+          "50": 2.0327,
+          "60": 2.0037,
+          "70": 1.9691,
+          "80": 1.9624,
+          "90": 1.95,
+          "100": 1.9318
+        },
+        "best": 1.9318,
+        "best_step": 100,
+        "at_end": 1.9318,
+        "wall_sec": 22.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4873,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.75,
+      "baseline": {
+        "curve": {
+          "0": 4.2432,
+          "10": 2.9181,
+          "20": 2.6314,
+          "30": 2.5639,
+          "40": 2.5335,
+          "50": 2.5199,
+          "60": 2.5169,
+          "70": 2.5132,
+          "80": 2.4982,
+          "90": 2.496,
+          "100": 2.5023
+        },
+        "best": 2.496,
+        "best_step": 90,
+        "at_end": 2.5023,
+        "wall_sec": 20.0,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9538,
+          "10": 2.5065,
+          "20": 2.383,
+          "30": 2.225,
+          "40": 2.1352,
+          "50": 2.0514,
+          "60": 2.0106,
+          "70": 1.9855,
+          "80": 1.972,
+          "90": 1.9546,
+          "100": 1.9481
+        },
+        "best": 1.9481,
+        "best_step": 100,
+        "at_end": 1.9481,
+        "wall_sec": 22.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 4.5,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.496,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.295,
+          "10": 2.8943,
+          "20": 2.625,
+          "30": 2.5436,
+          "40": 2.5249,
+          "50": 2.5067,
+          "60": 2.5032,
+          "70": 2.4975,
+          "80": 2.4832,
+          "90": 2.4764,
+          "100": 2.4686
+        },
+        "best": 2.4686,
+        "best_step": 100,
+        "at_end": 2.4686,
+        "wall_sec": 20.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.908,
+          "10": 2.4956,
+          "20": 2.3878,
+          "30": 2.2362,
+          "40": 2.1289,
+          "50": 2.0635,
+          "60": 2.0127,
+          "70": 1.9851,
+          "80": 1.9671,
+          "90": 1.9411,
+          "100": 1.9412
+        },
+        "best": 1.9411,
+        "best_step": 90,
+        "at_end": 1.9412,
+        "wall_sec": 22.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4686,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.2343,
+          "10": 2.9267,
+          "20": 2.6265,
+          "30": 2.5711,
+          "40": 2.5323,
+          "50": 2.5122,
+          "60": 2.5137,
+          "70": 2.4957,
+          "80": 2.4819,
+          "90": 2.4895,
+          "100": 2.4815
+        },
+        "best": 2.4815,
+        "best_step": 100,
+        "at_end": 2.4815,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9242,
+          "10": 2.4897,
+          "20": 2.3593,
+          "30": 2.1998,
+          "40": 2.1155,
+          "50": 2.0208,
+          "60": 2.0055,
+          "70": 1.9651,
+          "80": 1.9426,
+          "90": 1.9398,
+          "100": 1.9245
+        },
+        "best": 1.9245,
+        "best_step": 100,
+        "at_end": 1.9245,
+        "wall_sec": 22.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4815,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.2496,
+          "10": 2.8424,
+          "20": 2.6076,
+          "30": 2.5709,
+          "40": 2.5163,
+          "50": 2.5195,
+          "60": 2.4998,
+          "70": 2.4952,
+          "80": 2.4861,
+          "90": 2.476,
+          "100": 2.4742
+        },
+        "best": 2.4742,
+        "best_step": 100,
+        "at_end": 2.4742,
+        "wall_sec": 19.8,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9656,
+          "10": 2.504,
+          "20": 2.3932,
+          "30": 2.2503,
+          "40": 2.1332,
+          "50": 2.0577,
+          "60": 2.0153,
+          "70": 1.9861,
+          "80": 1.9597,
+          "90": 1.9467,
+          "100": 1.9304
+        },
+        "best": 1.9304,
+        "best_step": 100,
+        "at_end": 1.9304,
+        "wall_sec": 22.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4742,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.25,
+      "baseline": {
+        "curve": {
+          "0": 4.2982,
+          "10": 2.8383,
+          "20": 2.6451,
+          "30": 2.5569,
+          "40": 2.5194,
+          "50": 2.5024,
+          "60": 2.4899,
+          "70": 2.4779,
+          "80": 2.4745,
+          "90": 2.477,
+          "100": 2.4753
+        },
+        "best": 2.4745,
+        "best_step": 80,
+        "at_end": 2.4753,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9169,
+          "10": 2.517,
+          "20": 2.3905,
+          "30": 2.2371,
+          "40": 2.1465,
+          "50": 2.0407,
+          "60": 2.0055,
+          "70": 1.957,
+          "80": 1.9535,
+          "90": 1.9462,
+          "100": 1.9202
+        },
+        "best": 1.9202,
+        "best_step": 100,
+        "at_end": 1.9202,
+        "wall_sec": 23.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 4.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4745,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.25,
+      "baseline": {
+        "curve": {
+          "0": 4.2375,
+          "10": 2.8888,
+          "20": 2.626,
+          "30": 2.5594,
+          "40": 2.5324,
+          "50": 2.5057,
+          "60": 2.4923,
+          "70": 2.4941,
+          "80": 2.485,
+          "90": 2.4644,
+          "100": 2.4672
+        },
+        "best": 2.4644,
+        "best_step": 90,
+        "at_end": 2.4672,
+        "wall_sec": 20.1,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.935,
+          "10": 2.4923,
+          "20": 2.3621,
+          "30": 2.2224,
+          "40": 2.1052,
+          "50": 2.0294,
+          "60": 1.9969,
+          "70": 1.9583,
+          "80": 1.9564,
+          "90": 1.9169,
+          "100": 1.901
+        },
+        "best": 1.901,
+        "best_step": 100,
+        "at_end": 1.901,
+        "wall_sec": 22.5,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 4.5,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4644,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.25,
+      "baseline": {
+        "curve": {
+          "0": 4.2505,
+          "10": 2.8506,
+          "20": 2.6211,
+          "30": 2.5439,
+          "40": 2.5205,
+          "50": 2.506,
+          "60": 2.4849,
+          "70": 2.4939,
+          "80": 2.4718,
+          "90": 2.4678,
+          "100": 2.4581
+        },
+        "best": 2.4581,
+        "best_step": 100,
+        "at_end": 2.4581,
+        "wall_sec": 20.3,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9805,
+          "10": 2.5014,
+          "20": 2.3868,
+          "30": 2.2276,
+          "40": 2.1328,
+          "50": 2.0542,
+          "60": 2.0055,
+          "70": 1.9798,
+          "80": 1.9337,
+          "90": 1.9325,
+          "100": 1.9046
+        },
+        "best": 1.9046,
+        "best_step": 100,
+        "at_end": 1.9046,
+        "wall_sec": 22.3,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4581,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.3064,
+          "10": 2.7295,
+          "20": 2.5279,
+          "30": 2.4791,
+          "40": 2.4698,
+          "50": 2.4498,
+          "60": 2.4435,
+          "70": 2.4341,
+          "80": 2.4277,
+          "90": 2.4275,
+          "100": 2.4196
+        },
+        "best": 2.4196,
+        "best_step": 100,
+        "at_end": 2.4196,
+        "wall_sec": 20.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9305,
+          "10": 2.4624,
+          "20": 2.3865,
+          "30": 2.2075,
+          "40": 2.0941,
+          "50": 2.02,
+          "60": 1.9667,
+          "70": 1.9165,
+          "80": 1.9057,
+          "90": 1.8687,
+          "100": 1.8511
+        },
+        "best": 1.8511,
+        "best_step": 100,
+        "at_end": 1.8511,
+        "wall_sec": 22.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4196,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2374,
+          "10": 2.7162,
+          "20": 2.5411,
+          "30": 2.4943,
+          "40": 2.4653,
+          "50": 2.45,
+          "60": 2.4461,
+          "70": 2.4468,
+          "80": 2.4352,
+          "90": 2.4138,
+          "100": 2.4171
+        },
+        "best": 2.4138,
+        "best_step": 90,
+        "at_end": 2.4171,
+        "wall_sec": 20.1,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9524,
+          "10": 2.473,
+          "20": 2.3188,
+          "30": 2.1638,
+          "40": 2.0737,
+          "50": 1.9813,
+          "60": 1.9424,
+          "70": 1.9029,
+          "80": 1.8779,
+          "90": 1.8428,
+          "100": 1.8383
+        },
+        "best": 1.8383,
+        "best_step": 100,
+        "at_end": 1.8383,
+        "wall_sec": 22.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 4.5,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4138,
+        "left_censored": false,
+        "note": ""
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2551,
+          "10": 2.7863,
+          "20": 2.545,
+          "30": 2.486,
+          "40": 2.4681,
+          "50": 2.4539,
+          "60": 2.4564,
+          "70": 2.4371,
+          "80": 2.4341,
+          "90": 2.4225,
+          "100": 2.409
+        },
+        "best": 2.409,
+        "best_step": 100,
+        "at_end": 2.409,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.9942,
+          "10": 2.471,
+          "20": 2.3319,
+          "30": 2.2013,
+          "40": 2.0914,
+          "50": 2.0129,
+          "60": 1.949,
+          "70": 1.913,
+          "80": 1.8953,
+          "90": 1.8658,
+          "100": 1.8463
+        },
+        "best": 1.8463,
+        "best_step": 100,
+        "at_end": 1.8463,
+        "wall_sec": 22.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 5.0,
+        "hit_step": 20,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.409,
+        "left_censored": false,
+        "note": ""
+      }
+    }
+  ],
+  "summary": {
+    "by_overlap": {
+      "1": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 5.0,
+          "min": 5.0,
+          "max": 10.0,
+          "values": [
+            5.0,
+            5.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4693,
+          "min": 2.4565,
+          "max": 2.477,
+          "values": [
+            2.4565,
+            2.4693,
+            2.477
+          ]
+        },
+        "method_best": {
+          "median": 1.9276,
+          "min": 1.9141,
+          "max": 1.9287,
+          "values": [
+            1.9287,
+            1.9141,
+            1.9276
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.75": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 5.0,
+          "min": 4.5,
+          "max": 5.0,
+          "values": [
+            5.0,
+            5.0,
+            4.5
+          ]
+        },
+        "any_left_censored": false,
+        "baseline_best": {
+          "median": 2.4873,
+          "min": 2.4711,
+          "max": 2.496,
+          "values": [
+            2.4711,
+            2.4873,
+            2.496
+          ]
+        },
+        "method_best": {
+          "median": 1.9415,
+          "min": 1.9318,
+          "max": 1.9481,
+          "values": [
+            1.9415,
+            1.9318,
+            1.9481
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.5": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 5.0,
+          "min": 5.0,
+          "max": 5.0,
+          "values": [
+            5.0,
+            5.0,
+            5.0
+          ]
+        },
+        "any_left_censored": false,
+        "baseline_best": {
+          "median": 2.4742,
+          "min": 2.4686,
+          "max": 2.4815,
+          "values": [
+            2.4686,
+            2.4815,
+            2.4742
+          ]
+        },
+        "method_best": {
+          "median": 1.9304,
+          "min": 1.9245,
+          "max": 1.9411,
+          "values": [
+            1.9411,
+            1.9245,
+            1.9304
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.25": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 4.5,
+          "min": 4.0,
+          "max": 5.0,
+          "values": [
+            4.0,
+            4.5,
+            5.0
+          ]
+        },
+        "any_left_censored": false,
+        "baseline_best": {
+          "median": 2.4644,
+          "min": 2.4581,
+          "max": 2.4745,
+          "values": [
+            2.4745,
+            2.4644,
+            2.4581
+          ]
+        },
+        "method_best": {
+          "median": 1.9046,
+          "min": 1.901,
+          "max": 1.9202,
+          "values": [
+            1.9202,
+            1.901,
+            1.9046
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 5.0,
+          "min": 4.5,
+          "max": 5.0,
+          "values": [
+            5.0,
+            4.5,
+            5.0
+          ]
+        },
+        "any_left_censored": false,
+        "baseline_best": {
+          "median": 2.4138,
+          "min": 2.409,
+          "max": 2.4196,
+          "values": [
+            2.4196,
+            2.4138,
+            2.409
+          ]
+        },
+        "method_best": {
+          "median": 1.8463,
+          "min": 1.8383,
+          "max": 1.8511,
+          "values": [
+            1.8511,
+            1.8383,
+            1.8463
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      }
+    }
+  }
+}
