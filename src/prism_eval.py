@@ -914,7 +914,7 @@ def print_sweep_report(a):
         mb = g['method_best']['median'] if g['method_best'] else float('nan')
         ps = g['prism_score']
         score = (f'{ps["median"]:.1f}x' + ('*' if g['any_left_censored'] else '')
-                 if ps else 'n/a')
+                 if ps else 'never')
         js = dists.get(ov, {}).get('token_js', float('nan'))
         print(f'    {ov:>7} | {js:>6.4f} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
               f'{score:>7} | '
@@ -948,7 +948,7 @@ def print_teacher_report(a):
         mb = g['method_best']['median'] if g['method_best'] else float('nan')
         ps = g['prism_score']
         score = (f'{ps["median"]:.1f}x' + ('*' if g['any_left_censored'] else '')
-                 if ps else 'n/a')
+                 if ps else 'never')
         print(f'    {ts + " st":>8} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
               f'{score:>7} | '
               f'{"Y" if g["baseline_overfits_any"] else "n"}/'
