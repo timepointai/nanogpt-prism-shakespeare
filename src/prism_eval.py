@@ -426,6 +426,18 @@ def compute_score(baseline, method, eval_every):
             'note': 'method never reached baseline best loss',
         }
 
+    if hit == 0:
+        return {
+            'prism_score': None,
+            'hit_step': 0,
+            'reached_baseline_quality': True,
+            'reached_at_init': True,
+            'baseline_target': target,
+            'left_censored': True,
+            'note': 'reached baseline best at initialization (step 0) — the '
+                    'spectral init alone matches it; speedup unbounded',
+        }
+
     return {
         'prism_score': baseline['best_step'] / hit,
         'hit_step': hit,
