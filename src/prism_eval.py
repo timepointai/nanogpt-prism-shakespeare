@@ -383,6 +383,20 @@ def compute_score(baseline, method, eval_every):
             'note': 'method never reached baseline best loss',
         }
 
+    if hit == 0:
+        # The spectral init alone already meets the baseline's best, before any
+        # training — the ratio is unbounded. Flag it rather than divide by zero.
+        return {
+            'prism_score': None,
+            'hit_step': 0,
+            'reached_baseline_quality': True,
+            'reached_at_init': True,
+            'baseline_target': target,
+            'left_censored': True,
+            'note': 'reached baseline best at initialization (step 0) — the '
+                    'spectral init alone matches it; speedup unbounded',
+        }
+
     return {
         'prism_score': baseline['best_step'] / hit,
         'hit_step': hit,
@@ -437,17 +451,22 @@ def _summ_group(group):
 
 
 def summarize(runs):
-    """Flat summary for a single-condition run; a per-overlap breakdown when the
-    run is an overlap sweep (so the artifact shows the 7× vs. overlap curve)."""
+    """Flat summary for a single-condition run; a per-condition breakdown when the
+    run sweeps a dimension (overlap or teacher_steps), so the artifact shows the
+    advantage-vs-dimension curve directly."""
     if not runs:
         return None
-    if all(r.get('overlap') is None for r in runs):
+    if any(r.get('overlap') is not None for r in runs):
+        key, label, rev = 'overlap', 'by_overlap', True
+    elif any(r.get('teacher_steps') is not None for r in runs):
+        key, label, rev = 'teacher_steps', 'by_teacher_steps', False
+    else:
         return _summ_group(runs)
     by = {}
     for r in runs:
-        by.setdefault(r['overlap'], []).append(r)
-    return {'by_overlap': {f'{o:g}': _summ_group(g)
-                           for o, g in sorted(by.items(), reverse=True)}}
+        by.setdefault(r[key], []).append(r)
+    return {label: {f'{k:g}': _summ_group(g)
+                    for k, g in sorted(by.items(), reverse=rev)}}
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +491,8 @@ def run_key(config):
         key += f"_blr{config.get('baseline_lr') or 'def'}bw{config.get('baseline_warmup')}"
     if config.get('overlaps'):
         key += "_ov" + '-'.join(f"{o:g}" for o in config['overlaps'])
+    if config.get('teacher_sweep'):
+        key += "_ts" + '-'.join(str(t) for t in config['teacher_sweep'])
     return key
 
 
@@ -593,6 +614,11 @@ def main():
                    help="comma-separated overlap fractions to sweep (1.0=same-data, 0.0=disjoint)")
     p.add_argument('--batch_size', type=int, default=None,
                    help="training batch size for all arms (default: config 64; smaller = faster/noisier probes)")
+    # Teacher strength/size sweep: does a better teacher give a bigger head start?
+    # Same-data; baseline is teacher-independent (computed once/seed), the recipe
+    # is retrained per teacher size. e.g. --teacher_sweep=100,250,500,1000,2000
+    p.add_argument('--teacher_sweep', type=str, default=None,
+                   help="comma-separated teacher step counts to sweep (measures advantage vs teacher strength)")
     p.add_argument('--report', action='store_true', help='print the last artifact')
     args = p.parse_args()
     device = args.device or default_device()
@@ -610,6 +636,8 @@ def main():
     seeds = [int(s) for s in args.seeds.split(',') if s.strip()]
     overlaps = ([float(x) for x in args.overlap.split(',') if x.strip() != '']
                 if args.overlap else None)
+    teacher_sweep = ([int(x) for x in args.teacher_sweep.split(',') if x.strip() != '']
+                     if args.teacher_sweep else None)
 
     config = {
         'method': args.method,
@@ -621,6 +649,7 @@ def main():
         'device': device,
         'overlaps': overlaps,
         'overlap_distances': {},
+        'teacher_sweep': teacher_sweep,
         'batch_size': args.batch_size,
         'teacher_data_equals_student_data': overlaps is None,
         'method_lr': args.method_lr,
@@ -655,7 +684,10 @@ def main():
     path = os.path.join(RESULTS_DIR, f'{args.method}_{stamp}.json')
 
     # Report what is already banked, so a resume tells you exactly where it is.
-    total_stages = (len(overlaps) if overlaps else 1) * len(seeds) * 3
+    if teacher_sweep:
+        total_stages = len(seeds) * (1 + 2 * len(teacher_sweep))  # 1 baseline + (teacher+recipe)/size
+    else:
+        total_stages = (len(overlaps) if overlaps else 1) * len(seeds) * 3
     done = [f for f in os.listdir(run_dir) if f.endswith('.json')
             and f not in ('meta.json', 'lock.json')]
     log(f'Run key: {key}', 2)
@@ -673,6 +705,9 @@ def main():
         if overlaps is not None:
             log(f'Overlap sweep: {overlaps}  (teacher/student data-overlap dial; '
                 f'1.0=same-data, 0.0=disjoint/cross-data)', 2)
+        if teacher_sweep is not None:
+            log(f'Teacher sweep: {teacher_sweep} steps  (does a stronger teacher '
+                f'give a bigger head start? same-data, baseline reused per seed)', 2)
         if len(seeds) == 1:
             log('WARNING: single seed. Reports one sample, not a result.', 2)
 
@@ -697,9 +732,59 @@ def main():
             return art
 
         stage = [0]  # mutable counter for closure-free stage labelling
-        sweep = overlaps if overlaps is not None else [None]
-
+        bs = args.batch_size
         runs = []
+
+        if teacher_sweep is not None:
+            # Teacher strength/size sweep. Same-data; the baseline never sees the
+            # teacher, so it is trained ONCE per seed and reused, while the recipe
+            # is retrained per teacher size. Reveals advantage vs teacher strength.
+            setup(overlap=None)
+            for seed in seeds:
+                stage[0] += 1
+                log(f'[stage {stage[0]}/{total_stages}] baseline (seed {seed})', 2)
+                base_extra = ['--prism_init=False']
+                if args.baseline_lr:
+                    base_extra.append(f'--learning_rate={args.baseline_lr}')
+                if args.baseline_warmup is not None:
+                    base_extra.append(f'--warmup_iters={args.baseline_warmup}')
+                baseline = cached_stage(run_dir, f's{seed}_baseline', lambda:
+                    run_training('baseline', base_extra, seed, args.student_steps,
+                                 args.eval_every, args.eval_iters, device,
+                                 f's{seed}', batch_size=bs))
+                for ts in teacher_sweep:
+                    print('-' * 64)
+                    log(f'TEACHER {ts} steps · seed {seed}', 2)
+                    lbl = f's{seed}_t{ts}'
+                    stage[0] += 1
+                    log(f'[stage {stage[0]}/{total_stages}] teacher {ts} (seed {seed})', 2)
+                    cache = train_teacher(ts, seed, args.eval_iters, device, lbl,
+                                          cache_tag='tsweep', batch_size=bs)
+                    stage[0] += 1
+                    log(f'[stage {stage[0]}/{total_stages}] {args.method} '
+                        f'(seed {seed}, teacher {ts})', 2)
+                    method = cached_stage(run_dir, f's{seed}_t{ts}_{args.method}', lambda:
+                        run_training(args.method,
+                                     method_args_for(args.method, cache,
+                                                     args.method_lr, args.method_warmup),
+                                     seed, args.student_steps, args.eval_every,
+                                     args.eval_iters, device, lbl, batch_size=bs))
+                    runs.append({
+                        'seed': seed,
+                        'teacher_steps': ts,
+                        'baseline': baseline,
+                        'method': method,
+                        'score': compute_score(baseline, method, args.eval_every),
+                    })
+                    persist(runs, complete=False)
+                    log(f'  cell seed {seed} teacher {ts} banked ({len(runs)} total).', 2)
+            artifact = persist(runs, complete=True)
+            print_report(artifact)
+            log(f'Artifact: results/{os.path.basename(path)} (also latest.json)', 2)
+            log('COMMIT THIS FILE — it is the evidence for any claim you publish.', 2)
+            return
+
+        sweep = overlaps if overlaps is not None else [None]
         for overlap in sweep:
             n_train, n_test, dist = setup(overlap=overlap)
             if dist is not None:
@@ -768,6 +853,8 @@ def print_report(a):
     s, c = a['summary'], a['config']
     if s and 'by_overlap' in s:
         return print_sweep_report(a)
+    if s and 'by_teacher_steps' in s:
+        return print_teacher_report(a)
     print()
     print('  ' + '-' * 56)
     print(f'    PRISM EVAL — {c["method"]}')
@@ -840,6 +927,37 @@ def print_sweep_report(a):
     print('    teacher/student data stops overlapping is where content leakage,')
     print('    not structural transfer, was doing the work. Overlap 0.0 = the')
     print('    cross-data test: any advantage there is structural.')
+    print()
+
+
+def print_teacher_report(a):
+    c = a['config']
+    by = a['summary']['by_teacher_steps']
+    print()
+    print('  ' + '-' * 70)
+    print(f'    PRISM TEACHER-STRENGTH SWEEP — {c["method"]}  '
+          f'(does a stronger teacher help more?)')
+    print(f'    Seeds {c["seeds"]} · student {c["student_steps"]} steps, '
+          f'eval every {c["eval_every"]} · same-data')
+    print('  ' + '-' * 70)
+    print(f'    {"teacher":>8} | {"baseline":>8} | {"recipe":>8} | {"Δloss":>6} | '
+          f'{"score":>7} | b/m overfit')
+    print('  ' + '-' * 70)
+    for ts, g in by.items():
+        bb = g['baseline_best']['median'] if g['baseline_best'] else float('nan')
+        mb = g['method_best']['median'] if g['method_best'] else float('nan')
+        ps = g['prism_score']
+        score = (f'{ps["median"]:.1f}x' + ('*' if g['any_left_censored'] else '')
+                 if ps else 'n/a')
+        print(f'    {ts + " st":>8} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
+              f'{score:>7} | '
+              f'{"Y" if g["baseline_overfits_any"] else "n"}/'
+              f'{"Y" if g["method_overfits_any"] else "n"}')
+    print('  ' + '-' * 70)
+    print('    Δloss = baseline_best − recipe_best. Read down the teacher column:')
+    print('    if Δloss / score grow with teacher steps, a stronger teacher gives')
+    print('    a bigger head start — a lever to push the advantage higher.')
+    print('    score* = left-censored (lower bound).')
     print()
 
 
