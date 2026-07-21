@@ -1,6 +1,19 @@
 # Archive
 
-Superseded documentation, kept verbatim for the record. Not maintained.
+Superseded documentation and exploratory work, kept verbatim for the record. Not
+maintained.
+
+## experiments/ and notebooks/ — pre-ground-truth exploration
+
+[`experiments/`](experiments/) holds the exploratory notebooks, plans, and scripts
+from before the evidence-first rewrite — the "80+ runs" era. They contain **no
+committed results** (the notebooks were saved without executed outputs; every run
+wrote to ephemeral Colab paths), so they are exploratory history only, not
+evidence. [`notebooks/`](notebooks/) holds the two root-level Colab eval notebooks
+(`nanogpt_prism_eval.ipynb`, `nanogpt_prism_eval_gpt2.ipynb`), superseded by the
+Modal runners (`prism_modal.py`) and the local `src/prism_eval.py`. None of this is
+referenced by the current v0.2 docs; the authoritative path is the top-level
+[README.md](../README.md) and the committed [`results/`](../results/) artifacts.
 
 ## v0.1 — attribution, before the transfer results
 
