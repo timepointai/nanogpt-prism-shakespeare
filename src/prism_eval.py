@@ -20,6 +20,13 @@ Usage:
     # For the full 2x2, also get the baseline at the recipe's LR:
     python prism_eval.py --baseline_lr=5e-4 --baseline_warmup=50
 
+    # The data-overlap sweep — does the advantage survive as teacher and student
+    # stop sharing data? Wide + shallow (Prism acts in the first ~200-300 steps):
+    python prism_eval.py --method_lr=1e-3 --method_warmup=100 \
+        --teacher_steps=1000 --student_steps=1000 --eval_every=50 \
+        --overlap=1.0,0.75,0.5,0.25,0.0
+    # overlap 1.0 = same-data; 0.0 = disjoint (the cross-data / structural test).
+
 Recovery:
     The run is STEPWISE and RESUMABLE. Each expensive stage (per seed: teacher,
     baseline, method) is banked to .prism_runs/<run-key>/ the moment it finishes.
@@ -116,8 +123,22 @@ def provenance():
     return info
 
 
-def setup(workdir=SRC_DIR):
-    """Prepare dataset and partitions."""
+def setup(workdir=SRC_DIR, overlap=None):
+    """Prepare dataset partitions.
+
+    overlap=None (default): teacher and student share the same 80% split —
+    same-data transfer (the original protocol).
+
+    overlap in [0,1]: the teacher/student data-overlap DIAL. Each arm gets a
+    fixed-size window of exactly HALF the train pool, so the data BUDGET is
+    constant across the sweep — only the shared fraction changes, never the
+    amount of data (that would be a second confound). The teacher always trains
+    on pool[0:W]; the student window slides so its overlap with the teacher's is
+    exactly `overlap`:
+        overlap=1.0 → identical window (same-data, on half the pool)
+        overlap=0.0 → disjoint windows (cross-data: nothing shared)
+    The student is always SCORED on the original Shakespeare val set, which is
+    held out of every window regardless of overlap."""
     os.chdir(workdir)
 
     if not os.path.exists('data/shakespeare_char/train.bin'):
@@ -125,28 +146,38 @@ def setup(workdir=SRC_DIR):
         subprocess.run([sys.executable, 'data/shakespeare_char/prepare.py'],
                        capture_output=True, check=True)
 
-    train_all = np.array(np.memmap('data/shakespeare_char/train.bin',
-                                    dtype=np.uint16, mode='r'))
+    pool = np.array(np.memmap('data/shakespeare_char/train.bin',
+                              dtype=np.uint16, mode='r'))
     test_data = np.array(np.memmap('data/shakespeare_char/val.bin',
                                     dtype=np.uint16, mode='r'))
 
-    split = int(len(train_all) * 0.80)
-    train_data = train_all[:split].astype(np.uint16)
-    teacher_val = train_all[split:].astype(np.uint16)
+    if overlap is None:
+        split = int(len(pool) * 0.80)
+        teacher_train = pool[:split].astype(np.uint16)
+        student_train = pool[:split].astype(np.uint16)
+        teacher_val = pool[split:].astype(np.uint16)
+    else:
+        overlap = max(0.0, min(1.0, float(overlap)))
+        n = len(pool)
+        w = n // 2                                   # constant per-arm budget
+        start = int(round(w * (1.0 - overlap)))      # slide the student window
+        teacher_train = pool[0:w].astype(np.uint16)
+        student_train = pool[start:start + w].astype(np.uint16)
+        teacher_val = test_data                      # teacher's own eval only
+        log(f'overlap={overlap:.2f}: teacher pool[0:{w}] · student '
+            f'pool[{start}:{start + w}] · shared {max(0, w - start):,} tok '
+            f'({max(0, w - start) / w:.0%} of each window)', 2)
 
-    # Both datasets share train.bin: teacher and student train on the same 80%.
-    # Only the val stream differs (teacher tunes against the held-out 20%; the
-    # student is scored on the original Shakespeare val, never trained on).
-    for name, val in [('shakespeare_eval', test_data),
-                       ('shakespeare_teacher', teacher_val)]:
+    for name, train, val in [('shakespeare_eval', student_train, test_data),
+                              ('shakespeare_teacher', teacher_train, teacher_val)]:
         d = f'data/{name}'
         os.makedirs(d, exist_ok=True)
-        train_data.tofile(os.path.join(d, 'train.bin'))
-        val.tofile(os.path.join(d, 'val.bin'))
+        train.astype(np.uint16).tofile(os.path.join(d, 'train.bin'))
+        val.astype(np.uint16).tofile(os.path.join(d, 'val.bin'))
         shutil.copy('data/shakespeare_char/meta.pkl',
                      os.path.join(d, 'meta.pkl'))
 
-    return len(train_data), len(test_data)
+    return len(student_train), len(test_data)
 
 
 def parse_curve(stdout):
@@ -214,10 +245,13 @@ def stream_train(cmd, label, max_step, timeout=TRAIN_TIMEOUT):
     return rc, ''.join(out)
 
 
-def train_teacher(steps, seed, eval_iters, device, label):
-    """Train teacher model and extract fingerprint. One teacher per seed.
-    Cached by the presence of directions.pt, so a resumed run skips it."""
-    cache = f'.prism_cache/eval_teacher_s{seed}'
+def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval'):
+    """Train teacher model and extract fingerprint. One teacher per (seed, data,
+    steps). Cached by the presence of directions.pt, so a resumed run skips it.
+    cache_tag separates teachers trained on different data (e.g. the same-data
+    'eval' teacher vs. a 'sweep' teacher on pool[0:W]); the step count is in the
+    path too, so changing teacher_steps can't silently reuse a stale fingerprint."""
+    cache = f'.prism_cache/{cache_tag}_teacher_s{seed}_t{steps}'
     if os.path.exists(f'{cache}/directions.pt'):
         log(f'[resume] teacher (seed {seed}) already trained — using cached '
             f'fingerprint.', 2)
@@ -341,28 +375,41 @@ def method_args_for(method, cache, lr, warmup):
     }[method]
 
 
-def summarize(runs):
-    scores = [r['score']['prism_score'] for r in runs
+def _stats(vals):
+    if not vals:
+        return None
+    s = sorted(vals)
+    return {'median': s[len(s) // 2], 'min': s[0], 'max': s[-1],
+            'values': [round(v, 4) for v in vals]}
+
+
+def _summ_group(group):
+    scores = [r['score']['prism_score'] for r in group
               if r['score']['prism_score'] is not None]
-    censored = any(r['score']['left_censored'] for r in runs)
-
-    def stats(vals):
-        if not vals:
-            return None
-        s = sorted(vals)
-        return {'median': s[len(s) // 2], 'min': s[0], 'max': s[-1],
-                'values': [round(v, 4) for v in vals]}
-
     return {
-        'n_seeds': len(runs),
+        'n_seeds': len(group),
         'n_reached_baseline': len(scores),
-        'prism_score': stats(scores),
-        'any_left_censored': censored,
-        'baseline_best': stats([r['baseline']['best'] for r in runs]),
-        'method_best': stats([r['method']['best'] for r in runs]),
-        'method_overfits_any': any(r['method']['overfits'] for r in runs),
-        'baseline_overfits_any': any(r['baseline']['overfits'] for r in runs),
+        'prism_score': _stats(scores),
+        'any_left_censored': any(r['score']['left_censored'] for r in group),
+        'baseline_best': _stats([r['baseline']['best'] for r in group]),
+        'method_best': _stats([r['method']['best'] for r in group]),
+        'method_overfits_any': any(r['method']['overfits'] for r in group),
+        'baseline_overfits_any': any(r['baseline']['overfits'] for r in group),
     }
+
+
+def summarize(runs):
+    """Flat summary for a single-condition run; a per-overlap breakdown when the
+    run is an overlap sweep (so the artifact shows the 7× vs. overlap curve)."""
+    if not runs:
+        return None
+    if all(r.get('overlap') is None for r in runs):
+        return _summ_group(runs)
+    by = {}
+    for r in runs:
+        by.setdefault(r['overlap'], []).append(r)
+    return {'by_overlap': {f'{o:g}': _summ_group(g)
+                           for o, g in sorted(by.items(), reverse=True)}}
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +432,8 @@ def run_key(config):
         key += f"_mlr{config['method_lr']}mw{config['method_warmup']}"
     if config.get('baseline_lr') or config.get('baseline_warmup') is not None:
         key += f"_blr{config.get('baseline_lr') or 'def'}bw{config.get('baseline_warmup')}"
+    if config.get('overlaps'):
+        key += "_ov" + '-'.join(f"{o:g}" for o in config['overlaps'])
     return key
 
 
@@ -498,6 +547,12 @@ def main():
                    help="student LR for the baseline arm (default: config's 1e-3)")
     p.add_argument('--baseline_warmup', type=int, default=None,
                    help="warmup iters for the baseline arm (default: config's 100)")
+    # Teacher/student data-overlap dial (a sweep). Constant per-arm data budget
+    # (half the pool each), only the shared fraction varies: 1.0=same-data,
+    # 0.0=disjoint (cross-data). A comma list sweeps them in one run.
+    #   --overlap=1.0,0.75,0.5,0.25,0.0
+    p.add_argument('--overlap', type=str, default=None,
+                   help="comma-separated overlap fractions to sweep (1.0=same-data, 0.0=disjoint)")
     p.add_argument('--report', action='store_true', help='print the last artifact')
     args = p.parse_args()
     device = args.device or default_device()
@@ -513,6 +568,8 @@ def main():
         return
 
     seeds = [int(s) for s in args.seeds.split(',') if s.strip()]
+    overlaps = ([float(x) for x in args.overlap.split(',') if x.strip() != '']
+                if args.overlap else None)
 
     config = {
         'method': args.method,
@@ -522,7 +579,8 @@ def main():
         'eval_iters': args.eval_iters,
         'seeds': seeds,
         'device': device,
-        'teacher_data_equals_student_data': True,
+        'overlaps': overlaps,
+        'teacher_data_equals_student_data': overlaps is None,
         'method_lr': args.method_lr,
         'method_warmup': args.method_warmup,
         'baseline_lr': args.baseline_lr,
@@ -555,7 +613,7 @@ def main():
     path = os.path.join(RESULTS_DIR, f'{args.method}_{stamp}.json')
 
     # Report what is already banked, so a resume tells you exactly where it is.
-    total_stages = len(seeds) * 3
+    total_stages = (len(overlaps) if overlaps else 1) * len(seeds) * 3
     done = [f for f in os.listdir(run_dir) if f.endswith('.json')
             and f not in ('meta.json', 'lock.json')]
     log(f'Run key: {key}', 2)
@@ -564,14 +622,15 @@ def main():
 
     lock = acquire_lock(run_dir)
     try:
-        n_train, n_test = setup()
-        log(f'Train: {n_train:,} tokens | Test: {n_test:,} tokens', 2)
         log(f'Seeds: {seeds} | Method: {args.method} | Device: {device}', 2)
         log(f'Schedule: method LR {args.method_lr}/warmup {args.method_warmup} · '
             f'baseline LR {args.baseline_lr or "1e-3(config)"}/warmup '
             f'{args.baseline_warmup if args.baseline_warmup is not None else "100(config)"}'
             + ('  [MATCHED — only the spectral flags differ]' if config['schedule_matched']
                else '  [recipe LR differs from baseline — confounded]'), 2)
+        if overlaps is not None:
+            log(f'Overlap sweep: {overlaps}  (teacher/student data-overlap dial; '
+                f'1.0=same-data, 0.0=disjoint/cross-data)', 2)
         if len(seeds) == 1:
             log('WARNING: single seed. Reports one sample, not a result.', 2)
 
@@ -596,52 +655,58 @@ def main():
             return art
 
         stage = [0]  # mutable counter for closure-free stage labelling
-
-        def banner(seed, i):
-            print('-' * 64)
-            log(f'SEED {seed}  ({i + 1}/{len(seeds)})', 2)
+        sweep = overlaps if overlaps is not None else [None]
 
         runs = []
-        for i, seed in enumerate(seeds):
-            banner(seed, i)
-            lbl = f's{seed}'
+        for overlap in sweep:
+            n_train, n_test = setup(overlap=overlap)
+            tag = 'eval' if overlap is None else 'sweep'
+            osfx = '' if overlap is None else f'_o{overlap:g}'
+            print('-' * 64)
+            if overlap is None:
+                log(f'Train: {n_train:,} tokens | Test: {n_test:,} tokens', 2)
+            else:
+                log(f'OVERLAP {overlap:g}  ·  {n_train:,} train tok/arm · Test {n_test:,}', 2)
 
-            stage[0] += 1
-            log(f'[stage {stage[0]}/{total_stages}] teacher', 2)
-            cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
-                                  device, lbl)
+            for seed in seeds:
+                lbl = f's{seed}{osfx}'
 
-            baseline_extra = ['--prism_init=False']
-            if args.baseline_lr:
-                baseline_extra.append(f'--learning_rate={args.baseline_lr}')
-            if args.baseline_warmup is not None:
-                baseline_extra.append(f'--warmup_iters={args.baseline_warmup}')
+                stage[0] += 1
+                log(f'[stage {stage[0]}/{total_stages}] teacher (seed {seed})', 2)
+                cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
+                                      device, lbl, cache_tag=tag)
 
-            stage[0] += 1
-            log(f'[stage {stage[0]}/{total_stages}] baseline', 2)
-            baseline = cached_stage(run_dir, f's{seed}_baseline', lambda:
-                run_training('baseline', baseline_extra, seed,
-                             args.student_steps, args.eval_every,
-                             args.eval_iters, device, lbl))
+                baseline_extra = ['--prism_init=False']
+                if args.baseline_lr:
+                    baseline_extra.append(f'--learning_rate={args.baseline_lr}')
+                if args.baseline_warmup is not None:
+                    baseline_extra.append(f'--warmup_iters={args.baseline_warmup}')
 
-            stage[0] += 1
-            log(f'[stage {stage[0]}/{total_stages}] {args.method}', 2)
-            method = cached_stage(run_dir, f's{seed}_{args.method}', lambda:
-                run_training(args.method,
-                             method_args_for(args.method, cache,
-                                             args.method_lr, args.method_warmup),
-                             seed, args.student_steps, args.eval_every,
-                             args.eval_iters, device, lbl))
+                stage[0] += 1
+                log(f'[stage {stage[0]}/{total_stages}] baseline (seed {seed}{osfx})', 2)
+                baseline = cached_stage(run_dir, f's{seed}{osfx}_baseline', lambda:
+                    run_training('baseline', baseline_extra, seed,
+                                 args.student_steps, args.eval_every,
+                                 args.eval_iters, device, lbl))
 
-            runs.append({
-                'seed': seed,
-                'baseline': baseline,
-                'method': method,
-                'score': compute_score(baseline, method, args.eval_every),
-            })
-            persist(runs, complete=(i + 1 == len(seeds)))
-            log(f'seed {seed} banked → results/{os.path.basename(path)} '
-                f'({len(runs)}/{len(seeds)} seeds).', 2)
+                stage[0] += 1
+                log(f'[stage {stage[0]}/{total_stages}] {args.method} (seed {seed}{osfx})', 2)
+                method = cached_stage(run_dir, f's{seed}{osfx}_{args.method}', lambda:
+                    run_training(args.method,
+                                 method_args_for(args.method, cache,
+                                                 args.method_lr, args.method_warmup),
+                                 seed, args.student_steps, args.eval_every,
+                                 args.eval_iters, device, lbl))
+
+                runs.append({
+                    'seed': seed,
+                    'overlap': overlap,
+                    'baseline': baseline,
+                    'method': method,
+                    'score': compute_score(baseline, method, args.eval_every),
+                })
+                persist(runs, complete=False)
+                log(f'  cell seed {seed}{osfx} banked ({len(runs)} total).', 2)
 
         artifact = persist(runs, complete=True)
         print_report(artifact)
@@ -656,6 +721,8 @@ def main():
 
 def print_report(a):
     s, c = a['summary'], a['config']
+    if s and 'by_overlap' in s:
+        return print_sweep_report(a)
     print()
     print('  ' + '-' * 56)
     print(f'    PRISM EVAL — {c["method"]}')
@@ -693,6 +760,39 @@ def print_report(a):
     print('    baseline raises the score without improving the method.')
     print(f'    Teacher and student share training data — this is same-data')
     print('    transfer and does not rule out content leakage.')
+    print()
+
+
+def print_sweep_report(a):
+    c = a['config']
+    by = a['summary']['by_overlap']
+    print()
+    print('  ' + '-' * 68)
+    print(f'    PRISM OVERLAP SWEEP — {c["method"]}  '
+          f'(teacher/student data overlap; 1.0=same-data, 0.0=disjoint)')
+    print(f'    Seeds {c["seeds"]} · student {c["student_steps"]} steps, '
+          f'eval every {c["eval_every"]}')
+    print('  ' + '-' * 68)
+    print(f'    {"overlap":>7} | {"baseline":>8} | {"recipe":>8} | {"Δloss":>6} | '
+          f'{"score":>7} | overfit b/m')
+    print('  ' + '-' * 68)
+    for ov, g in by.items():
+        bb = g['baseline_best']['median'] if g['baseline_best'] else float('nan')
+        mb = g['method_best']['median'] if g['method_best'] else float('nan')
+        ps = g['prism_score']
+        score = (f'{ps["median"]:.1f}x' + ('*' if g['any_left_censored'] else '')
+                 if ps else 'n/a')
+        print(f'    {ov:>7} | {bb:>8.4f} | {mb:>8.4f} | {bb - mb:>6.3f} | '
+              f'{score:>7} | '
+              f'{"Y" if g["baseline_overfits_any"] else "n"}/'
+              f'{"Y" if g["method_overfits_any"] else "n"}')
+    print('  ' + '-' * 68)
+    print('    Δloss = baseline_best − recipe_best (higher = recipe wins by more).')
+    print('    score* = left-censored (lower bound). Read the trend down the')
+    print('    overlap column: where the recipe advantage falls off as the')
+    print('    teacher/student data stops overlapping is where content leakage,')
+    print('    not structural transfer, was doing the work. Overlap 0.0 = the')
+    print('    cross-data test: any advantage there is structural.')
     print()
 
 
