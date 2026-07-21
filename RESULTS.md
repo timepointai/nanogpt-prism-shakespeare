@@ -15,6 +15,8 @@ reproducible from an artifact in [`results/`](results/). Earlier writeups:
 | D | **Overlap probe**: 12 overlaps × 3 seeds, random blocks, matched LR, 100 steps | [`recipe_20260721T050203Z.json`](results/recipe_20260721T050203Z.json) |
 | E | **Cross-domain**: far corpus (Sherlock), student scored on its own data | [`recipe_20260721T161208Z.json`](results/recipe_20260721T161208Z.json) |
 | F | **Teacher-strength sweep**: teachers 100→2,000 steps, 300-step students | [`recipe_20260721T143246Z.json`](results/recipe_20260721T143246Z.json) |
+| G | **Lever eval — grassmann alignment alone** (single variable vs. Run E's plain control) | [`recipe_20260721T162552Z.json`](results/recipe_20260721T162552Z.json) |
+| H | **Lever eval — top-k=128 alone** (single variable vs. Run E's plain control) | [`recipe_20260721T164007Z.json`](results/recipe_20260721T164007Z.json) |
 | — | Sliding-window overlap sweep — **record only, interpretation retired** (difficulty confound; superseded by D) | [`recipe_20260721T022342Z.json`](results/recipe_20260721T022342Z.json) |
 | — | Far-corpus sweep scored on Shakespeare val — superseded by E (see scope note in [`results/README.md`](results/README.md)) | [`recipe_20260721T153218Z.json`](results/recipe_20260721T153218Z.json) |
 
@@ -118,6 +120,27 @@ trained teacher.
 This is also indirect evidence *for* the spectral mechanism: the effect tracks the
 quality of the teacher's geometry, which a generic regularizer has no access to.
 
+## 6. Lever evals: the plain blend wins at this distance (Runs G, H)
+
+Two geometric-alignment refinements (contributed in PR #1) evaluated one variable
+at a time against Run E's plain control — same rig, same seeds, same overlaps,
+only the lever flag added:
+
+- **Grassmann geodesic pairing** (`--align_mode=grassmann`): Δloss **−0.012 to
+  −0.023** at every overlap — the recipe never reaches the baseline's best. The
+  geodesic re-pairing eliminates the head start the plain 75% blend delivers
+  (+0.59 to +0.63 on the identical rig).
+- **Top-k=128 subspace transfer** (`--align_topk=128`): the head start survives
+  (Δloss +0.54 to +0.57, scores ~5×) but is uniformly **+0.04 to +0.06 worse**
+  than transferring all ~384 directions. The discarded low-energy tail carries
+  useful geometry at this scale.
+
+Verdict at Sherlock-distance: **the plain full-direction blend is the strongest
+configuration measured** — there is no headroom for geometric refinement here,
+because the plain recipe already transfers at full strength (Run E). The levers'
+real test is a corpus far enough that the plain recipe degrades (see next
+experiments).
+
 ## What this does NOT establish
 
 - **Early-window scope.** Runs D and E measure the head start at step 100
@@ -155,7 +178,10 @@ python prism_eval.py --teacher_steps=500 --student_steps=100 --eval_every=10 \
   --overlap=1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.05,0.0               # Run D
 python prism_eval.py --teacher_sweep=100,250,500,1000,2000 \
   --student_steps=300 --eval_every=20 --eval_iters=40 --batch_size=32       # Run F
-# Run E needs the leo-test branch (--far_corpus=data/far.txt --far_val)
+python prism_eval.py --teacher_steps=500 --student_steps=100 --eval_every=10 \
+  --eval_iters=40 --batch_size=32 --method_lr=1e-3 --method_warmup=20 \
+  --baseline_warmup=20 --overlap=1.0,0.75,0.5,0.25,0.0 \
+  --far_corpus=data/far.txt --far_val                                       # Run E
 python prism_eval.py --report                                               # reprint last artifact
 ```
 

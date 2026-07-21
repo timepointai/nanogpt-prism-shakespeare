@@ -265,8 +265,12 @@ the payoff weight-copying cannot reach.
 
 - **Truly far modality** — source code or another language; find where structural
   transfer degrades. Geometric-alignment refinements (Grassmann direction pairing,
-  top-k subspace transfer, CKA regularization — under evaluation on the
-  collaboration branch) get their shot where the plain recipe weakens.
+  top-k subspace transfer, CKA regularization — contributed in PR #1, merged) get
+  their shot where the plain recipe weakens: first single-variable evals at
+  Sherlock-distance found the plain 75% blend strongest (grassmann eliminates the
+  head start; top-k=128 is uniformly ~0.05 worse than full transfer —
+  `recipe_20260721T162552Z.json`, `recipe_20260721T164007Z.json`), which is the
+  expected shape when the plain recipe already transfers at full strength.
 - **Long-horizon far-domain** — does overfitting immunity transfer too?
 - **Endurance** — 20k–50k steps.
 - **Ablations** — `spectral_only` / `dirs_only`, reg-matched baseline.

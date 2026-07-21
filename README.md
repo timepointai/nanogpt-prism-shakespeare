@@ -163,8 +163,9 @@ python prism_eval.py --teacher_sweep=100,250,500,1000,2000 \
 python prism_eval.py --report                                  # reprint last artifact
 ```
 
-The cross-domain arm (`--far_corpus` / `--far_val`) currently lives on the
-[`leo-test`](../../tree/leo-test) branch pending merge — see below.
+The cross-domain arm reproduces with
+`--overlap=1.0,0.75,0.5,0.25,0.0 --far_corpus=data/far.txt --far_val` (plus the
+probe schedule above).
 
 ## What's next
 
@@ -182,11 +183,17 @@ The cross-domain arm (`--far_corpus` / `--far_val`) currently lives on the
    need a projection scheme. The most differentiated payoff: weight-copying can't
    change architecture, geometry might.
 
-A collaboration branch ([`leo-test`](../../tree/leo-test), PR #1 by Leonard Wang)
-adds geometric-alignment refinements — Grassmann geodesic direction pairing, top-k
-subspace transfer, per-layer spectra, a CKA representational regularizer — plus the
-far-corpus evaluation infrastructure the cross-domain result was measured with.
-Per-lever evaluation against the plain recipe is in progress.
+Geometric-alignment refinements contributed by Leonard Wang (PR #1, now merged)
+are available as opt-in flags — Grassmann geodesic direction pairing
+(`--align_mode=grassmann`), top-k subspace transfer (`--align_topk`), per-layer
+spectra, a CKA representational regularizer — alongside the far-corpus evaluation
+infrastructure the cross-domain result was measured with. First single-variable
+evaluations (committed): at Sherlock-distance the plain 75% blend is already the
+strongest configuration — grassmann pairing eliminates the head start
+([`…T162552Z`](results/recipe_20260721T162552Z.json)), and top-k=128 keeps it but
+uniformly ~0.05 worse than transferring all directions
+([`…T164007Z`](results/recipe_20260721T164007Z.json)). Their real test is the
+truly-far modality above, where the plain recipe may finally need the help.
 
 ## Repo map
 
@@ -203,11 +210,10 @@ src/prism_eval.py          ← the benchmark (schedule/overlap/teacher-sweep kno
 src/prism_accelerate.py    ← apply Prism to any checkpoint (the "use it" entry point)
 src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel
 src/prism_extract.py       ← extract a fingerprint from any checkpoint
+src/prism_selftest.py      ← 25 offline invariant tests for the transfer levers
+data/far.txt               ← Sherlock Holmes (Project Gutenberg #1661, public
+                             domain, boilerplate stripped) — the far corpus
 ```
-
-The cross-domain machinery (`--far_corpus` / `--far_val` and `data/far.txt` —
-Sherlock Holmes, Project Gutenberg #1661, public domain, boilerplate stripped)
-lives on the [`leo-test`](../../tree/leo-test) branch pending merge.
 
 ## License
 

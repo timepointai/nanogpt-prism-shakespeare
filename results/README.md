@@ -30,6 +30,12 @@ Eval artifacts. **This directory is the evidence.** Committed runs:
   so this shows the teacher-geometry init isn't washed out by far-domain
   training — it does not yet measure accelerated learning *of* the far domain.
   Superseded by the `far_val` run below.
+- `recipe_20260721T162552Z.json` — lever eval, **grassmann alignment alone**
+  (single variable vs. the plain `far_val` control): Δloss −0.012..−0.023 at
+  every overlap — the geodesic pairing eliminates the head start.
+- `recipe_20260721T164007Z.json` — lever eval, **top-k=128 alone**: head start
+  survives (Δloss +0.54..+0.57) but uniformly ~0.05 worse than the plain
+  full-direction blend; the discarded tail carries useful geometry.
 - `recipe_20260721T161208Z.json` — **the cross-domain result** (`far_val: true`):
   same sweep, but each student is scored on a val set mirroring its *own* train
   mixture (pure held-out Sherlock at overlap 0.0). Sanity gate: the overlap-1.0
