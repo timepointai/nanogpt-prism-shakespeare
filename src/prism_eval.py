@@ -28,6 +28,16 @@ Usage:
         --batch_size=32 --overlap=1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.05,0.0
     # overlap 1.0 = same-data; 0.0 = disjoint (the cross-data / structural test).
 
+    # Transfer improvements (opt-in; all default to the committed recipe). Each
+    # non-default knob is folded into the run key, so it gets its own artifact and
+    # never false-resumes onto a plain-recipe result. See IMPROVEMENTS.md.
+    python prism_eval.py --method_lr=1e-3 --method_warmup=100 \
+        --align_mode=grassmann --align_topk=32     # geometry-paired top-k transfer
+    python prism_eval.py --n_dct=16 --per_layer     # truer, per-matrix spectrum
+    python prism_eval.py --cka=0.1 --cka_layers=2,4 # representational (CKA) transfer
+    # The real structure-vs-content test: fresh blocks from a genuinely far corpus
+    python prism_eval.py --overlap=0.0 --far_corpus=data/far.txt --method_lr=1e-3 --method_warmup=100
+
 Recovery:
     The run is STEPWISE and RESUMABLE. Each expensive stage (per seed: teacher,
     baseline, method) is banked to .prism_runs/<run-key>/ the moment it finishes.
@@ -147,7 +157,23 @@ def _token_js(a, b):
     return round(0.5 * kl(pa, pm) + 0.5 * kl(pb, pm), 6)
 
 
-def setup(workdir=SRC_DIR, overlap=None):
+def _encode_corpus(path, meta_pkl):
+    """Char-encode an external text file with Shakespeare's vocab (stoi from
+    meta.pkl), dropping out-of-vocab characters. Returns a uint16 token array — a
+    genuinely different distribution in the SAME vocabulary, for the far arm."""
+    import pickle
+    with open(meta_pkl, 'rb') as f:
+        stoi = pickle.load(f)['stoi']
+    with open(path, 'r', errors='ignore') as f:
+        text = f.read()
+    toks = [stoi[c] for c in text if c in stoi]
+    if not toks:
+        raise RuntimeError(f'far_corpus {path}: no characters in the Shakespeare '
+                           f'vocab — pick a text over the same alphabet.')
+    return np.array(toks, dtype=np.uint16)
+
+
+def setup(workdir=SRC_DIR, overlap=None, far_corpus=None, far_val=False):
     """Prepare dataset partitions. Returns (n_student_tokens, n_test_tokens, dist).
 
     overlap=None (default): teacher and student share the same 80% split —
@@ -161,8 +187,11 @@ def setup(workdir=SRC_DIR, overlap=None):
         overlap=1.0 → identical block set (same-data)
         overlap=0.0 → disjoint block sets (cross-data: nothing shared)
     This removes the slice-position/difficulty confound of a sliding window. The
-    student is always SCORED on the held-out Shakespeare val set. dist carries the
-    realized overlap plus the token-JS distance between the two arms' data."""
+    student is SCORED on the held-out Shakespeare val set by default; with
+    far_corpus + far_val=True it is scored on a val mixture mirroring its own
+    train mixture (held-out far text for the fresh fraction) — the accelerated-
+    learning-of-the-new-domain test. dist carries the realized overlap plus the
+    token-JS distance between the two arms' data."""
     os.chdir(workdir)
 
     if not os.path.exists('data/shakespeare_char/train.bin'):
@@ -174,6 +203,8 @@ def setup(workdir=SRC_DIR, overlap=None):
                               dtype=np.uint16, mode='r'))
     test_data = np.array(np.memmap('data/shakespeare_char/val.bin',
                                     dtype=np.uint16, mode='r'))
+    student_val = test_data
+    val_mix = None
     dist = None
 
     if overlap is None:
@@ -189,20 +220,59 @@ def setup(workdir=SRC_DIR, overlap=None):
         half = N_BLOCKS // 2
         teacher_idx, other_idx = perm[:half], perm[half:]
         n_shared = int(round(overlap * half))
-        student_idx = np.concatenate([teacher_idx[:n_shared],
-                                      other_idx[:half - n_shared]])
         teacher_train = blocks[teacher_idx].reshape(-1).astype(np.uint16)
-        student_train = blocks[student_idx].reshape(-1).astype(np.uint16)
+        shared = blocks[teacher_idx[:n_shared]].reshape(-1).astype(np.uint16)
+        n_fresh = half - n_shared
+        if far_corpus:
+            # The fresh (non-shared) blocks come from a DIFFERENT corpus, so the
+            # student's data is distributionally far from the teacher's — the real
+            # structure-vs-content test (large token-JS), not just disjoint blocks
+            # of the same Shakespeare.
+            far = _encode_corpus(far_corpus, 'data/shakespeare_char/meta.pkl')
+            far_val_toks = None
+            if far_val:
+                # Reserve a held-out tail of the far corpus BEFORE any tiling, so
+                # the far val data is never seen in training even when the far
+                # text is shorter than the fresh-block budget.
+                n_res = min(len(far) // 10, len(test_data))
+                far_val_toks = far[-n_res:].astype(np.uint16)
+                far = far[:-n_res]
+            need = n_fresh * blk
+            if need and len(far) < need:
+                far = np.tile(far, int(np.ceil(need / len(far))))
+            fresh = far[:need].astype(np.uint16)
+            if far_val_toks is not None:
+                # Score the student on its OWN data mixture: Shakespeare val in
+                # proportion to the shared blocks, held-out far text for the
+                # rest. overlap=1.0 → pure Shakespeare val (identical to the base
+                # protocol); overlap=0.0 → pure far-corpus val. This measures
+                # accelerated learning OF the student's domain — a Shakespeare
+                # val set would instead reward retaining the teacher's domain.
+                n_sh_val = int(round((n_shared / half) * len(test_data)))
+                n_fa_val = min(len(far_val_toks), len(test_data) - n_sh_val)
+                student_val = np.concatenate(
+                    [test_data[:n_sh_val].astype(np.uint16),
+                     far_val_toks[:n_fa_val]]).astype(np.uint16)
+                val_mix = {'shakespeare_tokens': int(n_sh_val),
+                           'far_tokens': int(n_fa_val)}
+        else:
+            fresh = blocks[other_idx[:n_fresh]].reshape(-1).astype(np.uint16)
+        student_train = np.concatenate([shared, fresh]).astype(np.uint16)
         teacher_val = test_data
         dist = {'overlap_requested': overlap,
                 'overlap_realized': round(n_shared / half, 4),
                 'shared_blocks': n_shared, 'blocks_per_arm': half,
+                'far_corpus': os.path.basename(far_corpus) if far_corpus else None,
+                'far_val': bool(far_corpus and far_val),
                 'token_js': _token_js(teacher_train, student_train)}
+        if val_mix:
+            dist['val_mix'] = val_mix
         log(f'overlap={overlap:.2f}: {n_shared}/{half} blocks shared · '
-            f'token-JS {dist["token_js"]:.4f} · random blocks across corpus '
+            f'token-JS {dist["token_js"]:.4f} · '
+            f'{"FAR corpus fresh blocks" if far_corpus else "random blocks across corpus"} '
             f'(difficulty controlled)', 2)
 
-    for name, train, val in [('shakespeare_eval', student_train, test_data),
+    for name, train, val in [('shakespeare_eval', student_train, student_val),
                               ('shakespeare_teacher', teacher_train, teacher_val)]:
         d = f'data/{name}'
         os.makedirs(d, exist_ok=True)
@@ -211,7 +281,7 @@ def setup(workdir=SRC_DIR, overlap=None):
         shutil.copy('data/shakespeare_char/meta.pkl',
                      os.path.join(d, 'meta.pkl'))
 
-    return len(student_train), len(test_data), dist
+    return len(student_train), len(student_val), dist
 
 
 def parse_curve(stdout):
@@ -280,13 +350,16 @@ def stream_train(cmd, label, max_step, timeout=TRAIN_TIMEOUT):
 
 
 def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval',
-                  batch_size=None):
+                  batch_size=None, n_dct=8, per_layer=False):
     """Train teacher model and extract fingerprint. One teacher per (seed, data,
     steps). Cached by the presence of directions.pt, so a resumed run skips it.
     cache_tag separates teachers trained on different data (e.g. the same-data
     'eval' teacher vs. an 'rsweep' teacher on random blocks); the step count is in
     the path too, so changing teacher_steps can't silently reuse a stale one."""
-    cache = f'.prism_cache/{cache_tag}_teacher_s{seed}_t{steps}'
+    # n_dct / per_layer change the fingerprint, so they're in the cache path — a
+    # 16-coeff extract must never silently reuse an 8-coeff one.
+    sfx = ('' if n_dct == 8 else f'_dct{n_dct}') + ('_pl' if per_layer else '')
+    cache = f'.prism_cache/{cache_tag}_teacher_s{seed}_t{steps}{sfx}'
     if os.path.exists(f'{cache}/directions.pt'):
         log(f'[resume] teacher (seed {seed}) already trained — using cached '
             f'fingerprint.', 2)
@@ -314,8 +387,8 @@ def train_teacher(steps, seed, eval_iters, device, label, cache_tag='eval',
     e = subprocess.run([
         sys.executable, 'prism_extract.py',
         '--ckpt', f'out-eval-teacher-s{seed}/ckpt.pt',
-        '--out', cache,
-    ], capture_output=True, text=True, timeout=300)
+        '--out', cache, f'--n_dct={n_dct}',
+    ] + (['--per_layer'] if per_layer else []), capture_output=True, text=True, timeout=300)
     if e.returncode != 0:
         raise RuntimeError(f'Fingerprint extraction failed:\n{e.stderr[-2000:]}')
     log(f'fingerprint saved to {cache}.', 2)
@@ -411,20 +484,50 @@ def compute_score(baseline, method, eval_every):
     }
 
 
-def method_args_for(method, cache, lr, warmup):
+def method_args_for(method, cache, lr, warmup, knobs=None, seed=None):
+    """Build the train.py flags for one method arm, plus any opt-in transfer knobs.
+    knobs come straight from the CLI (align_mode/topk/…, mod overrides, CKA); they
+    append to the base recipe so the defaults stay byte-for-byte identical."""
     common = [
         '--prism_init=True',
         f'--prism_spectra={cache}/spectra.json',
         f'--learning_rate={lr}', f'--warmup_iters={warmup}',
     ]
     dirs = [f'--prism_directions={cache}/directions.pt']
-    return {
+    base = {
         'recipe':        common + ['--prism_align=0.75'] + dirs + ['--prism_mod=0.01', '--prism_mod_decay=0.9999'],
         'marathon':      common + ['--prism_align=0.75'] + dirs + ['--prism_mod=0.01', '--prism_mod_decay=0.9999'],
         'sprint':        common + ['--prism_align=0.75'] + dirs + ['--prism_mod=0.005', '--prism_mod_decay=0.999'],
         'spectral_only': common + ['--prism_align=0.0', '--prism_mod=0.01', '--prism_mod_decay=0.9999'],
         'dirs_only':     common + ['--prism_align=0.75'] + dirs,
     }[method]
+
+    k = knobs or {}
+    extra = []
+    if k.get('per_layer'):
+        extra.append(f'--prism_per_layer_spectra={cache}/spectra_per_layer.json')
+    if k.get('align_mode') is not None:
+        extra.append(f'--prism_align_mode={k["align_mode"]}')
+    if k.get('align_topk') is not None:
+        extra.append(f'--prism_align_topk={k["align_topk"]}')
+    if k.get('align_depth_gamma') is not None:
+        extra.append(f'--prism_align_depth_gamma={k["align_depth_gamma"]}')
+    if k.get('align_spec') is not None:
+        extra.append(f'--prism_align_spec={k["align_spec"]}')
+    if k.get('mod') is not None:
+        extra.append(f'--prism_mod={k["mod"]}')
+    if k.get('mod_decay') is not None:
+        extra.append(f'--prism_mod_decay={k["mod_decay"]}')
+    if k.get('mod_transition') is not None:
+        extra.append(f'--prism_mod_transition={k["mod_transition"]}')
+    if k.get('mod_sustain') is not None:
+        extra.append(f'--prism_mod_sustain={k["mod_sustain"]}')
+    if k.get('cka') is not None and seed is not None:
+        extra.append(f'--prism_cka={k["cka"]}')
+        extra.append(f'--prism_cka_teacher=out-eval-teacher-s{seed}/ckpt.pt')
+        if k.get('cka_layers') is not None:
+            extra.append(f'--prism_cka_layers={k["cka_layers"]}')
+    return base + extra
 
 
 def _stats(vals):
@@ -493,6 +596,15 @@ def run_key(config):
         key += "_ov" + '-'.join(f"{o:g}" for o in config['overlaps'])
     if config.get('teacher_sweep'):
         key += "_ts" + '-'.join(str(t) for t in config['teacher_sweep'])
+    # New transfer knobs are part of the experiment's identity too — a grassmann /
+    # top-k / per-layer / CKA run must not resume onto a plain-recipe result.
+    if config.get('n_dct', 8) != 8:
+        key += f"_dct{config['n_dct']}"
+    mk = config.get('method_knobs') or {}
+    for k in sorted(mk):
+        v = mk[k]
+        tag = re.sub(r'[^A-Za-z0-9.]+', '', str(v))
+        key += f"_{k[:3]}{tag}"
     return key
 
 
@@ -619,6 +731,44 @@ def main():
     # is retrained per teacher size. e.g. --teacher_sweep=100,250,500,1000,2000
     p.add_argument('--teacher_sweep', type=str, default=None,
                    help="comma-separated teacher step counts to sweep (measures advantage vs teacher strength)")
+    # A genuinely FAR student arm: at overlap 0.0 the disjoint blocks still come
+    # from the SAME corpus (small token-JS), so it can't separate structure from
+    # content. --far_corpus swaps the student's non-shared blocks for text from a
+    # different corpus (char-encoded with Shakespeare's vocab) so token-JS is large
+    # — the real structure-vs-content test. Report advantage against token-JS.
+    p.add_argument('--far_corpus', type=str, default=None,
+                   help="path to a .txt corpus for the far (large-distance) student arm")
+    p.add_argument('--far_val', action='store_true',
+                   help="score the student on a val mixture mirroring its own train "
+                        "mixture (held-out far text for the fresh fraction) instead "
+                        "of the Shakespeare val set — measures accelerated learning "
+                        "OF the far domain rather than retention of the teacher's")
+    # ── New transfer knobs (opt-in; recorded in the artifact and the run key) ──
+    p.add_argument('--n_dct', type=int, default=None,
+                   help="DCT coeffs for the spectral imprint (default 8); higher = truer spectrum")
+    p.add_argument('--per_layer', action='store_true',
+                   help="imprint each matrix's own spectrum instead of the group average")
+    p.add_argument('--align_mode', type=str, default=None,
+                   choices=['linear', 'grassmann', 'subspace'],
+                   help="EigenTransfer direction pairing: linear (default) | grassmann | subspace")
+    p.add_argument('--align_topk', type=int, default=None,
+                   help="transfer only the leading k singular directions (default: all)")
+    p.add_argument('--align_depth_gamma', type=float, default=None,
+                   help="taper alignment with layer depth: base*(1-gamma*depth_frac)")
+    p.add_argument('--align_spec', type=str, default=None,
+                   help="per-group alignment, e.g. 'attention:0.9,ffn_down:0.5'")
+    p.add_argument('--mod', type=str, default=None,
+                   help="override Mod Wheel strength (default 0.01 for recipe)")
+    p.add_argument('--mod_decay', type=str, default=None,
+                   help="override Mod Wheel per-step decay (default 0.9999)")
+    p.add_argument('--mod_transition', type=int, default=None,
+                   help="Mod Wheel attack→sustain transition step (0 = single phase)")
+    p.add_argument('--mod_sustain', type=str, default=None,
+                   help="Mod Wheel sustain-phase strength (needs --mod_transition)")
+    p.add_argument('--cka', type=str, default=None,
+                   help="weight on the (1-CKA) representational-distance loss (needs teacher ckpt)")
+    p.add_argument('--cka_layers', type=str, default=None,
+                   help="comma block indices for the CKA match (default: all)")
     p.add_argument('--report', action='store_true', help='print the last artifact')
     args = p.parse_args()
     device = args.device or default_device()
@@ -639,6 +789,35 @@ def main():
     teacher_sweep = ([int(x) for x in args.teacher_sweep.split(',') if x.strip() != '']
                      if args.teacher_sweep else None)
 
+    # Non-default transfer knobs — recorded in the artifact and folded into the run
+    # key so a knob change starts a fresh run instead of false-resuming. n_dct also
+    # governs teacher extraction, so it lives outside method_knobs (see below).
+    n_dct = args.n_dct or 8
+    method_knobs = {}
+    for k, v, default in [
+        ('per_layer', args.per_layer, False),
+        ('align_mode', args.align_mode, None),
+        ('align_topk', args.align_topk, None),
+        ('align_depth_gamma', args.align_depth_gamma, None),
+        ('align_spec', args.align_spec, None),
+        ('mod', args.mod, None),
+        ('mod_decay', args.mod_decay, None),
+        ('mod_transition', args.mod_transition, None),
+        ('mod_sustain', args.mod_sustain, None),
+        ('cka', args.cka, None),
+        ('cka_layers', args.cka_layers, None),
+    ]:
+        if v != default:
+            method_knobs[k] = v
+    if args.n_dct is not None:
+        method_knobs['n_dct'] = args.n_dct
+    if args.far_corpus:
+        method_knobs['far_corpus'] = os.path.basename(args.far_corpus)
+    if args.far_val:
+        # Changes what BOTH arms are scored on — a far_val run must never resume
+        # onto (or be compared against) a Shakespeare-val run.
+        method_knobs['far_val'] = 1
+
     config = {
         'method': args.method,
         'teacher_steps': args.teacher_steps,
@@ -658,6 +837,10 @@ def main():
         'baseline_warmup': args.baseline_warmup,
         'schedule_matched': (args.method_lr == (args.baseline_lr or '1e-3')
                              and args.method_warmup == (args.baseline_warmup or 100)),
+        'n_dct': n_dct,
+        'method_knobs': method_knobs,
+        'far_corpus': args.far_corpus,
+        'far_val': args.far_val,
     }
 
     key = run_key(config)
@@ -766,7 +949,8 @@ def main():
                     method = cached_stage(run_dir, f's{seed}_t{ts}_{args.method}', lambda:
                         run_training(args.method,
                                      method_args_for(args.method, cache,
-                                                     args.method_lr, args.method_warmup),
+                                                     args.method_lr, args.method_warmup,
+                                                     knobs=method_knobs, seed=seed),
                                      seed, args.student_steps, args.eval_every,
                                      args.eval_iters, device, lbl, batch_size=bs))
                     runs.append({
@@ -786,7 +970,8 @@ def main():
 
         sweep = overlaps if overlaps is not None else [None]
         for overlap in sweep:
-            n_train, n_test, dist = setup(overlap=overlap)
+            n_train, n_test, dist = setup(overlap=overlap, far_corpus=args.far_corpus,
+                                          far_val=args.far_val)
             if dist is not None:
                 config['overlap_distances'][f'{overlap:g}'] = dist
             tag = 'eval' if overlap is None else 'rsweep'
@@ -804,7 +989,8 @@ def main():
                 stage[0] += 1
                 log(f'[stage {stage[0]}/{total_stages}] teacher (seed {seed})', 2)
                 cache = train_teacher(args.teacher_steps, seed, args.eval_iters,
-                                      device, lbl, cache_tag=tag, batch_size=bs)
+                                      device, lbl, cache_tag=tag, batch_size=bs,
+                                      n_dct=n_dct, per_layer=args.per_layer)
 
                 baseline_extra = ['--prism_init=False']
                 if args.baseline_lr:
@@ -824,7 +1010,8 @@ def main():
                 method = cached_stage(run_dir, f's{seed}{osfx}_{args.method}', lambda:
                     run_training(args.method,
                                  method_args_for(args.method, cache,
-                                                 args.method_lr, args.method_warmup),
+                                                 args.method_lr, args.method_warmup,
+                                                 knobs=method_knobs, seed=seed),
                                  seed, args.student_steps, args.eval_every,
                                  args.eval_iters, device, lbl, batch_size=bs))
 

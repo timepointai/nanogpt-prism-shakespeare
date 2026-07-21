@@ -43,8 +43,26 @@ def classify_param(name):
     return None
 
 
-def extract_from_checkpoint(ckpt_path, out_dir, n_dct=8):
-    """Extract spectra and directions from a nanoGPT checkpoint."""
+def _dct_fit(sv, n_dct):
+    """Fit n_dct DCT-II coefficients to a (normalized) singular-value curve.
+    Inverse of prism_init.dct_expand's softplus/cosine parameterization."""
+    clipped = np.clip(np.asarray(sv, dtype=float), 0.01, None)
+    target = np.log(np.exp(clipped) - 1.0 + 1e-10)
+    n = len(target)
+    t = np.linspace(0, np.pi, n, endpoint=False)
+    basis = np.zeros((n, n_dct))
+    for i in range(n_dct):
+        basis[:, i] = np.cos((i + 0.5) * t)
+    coeffs, _, _, _ = np.linalg.lstsq(basis, target, rcond=None)
+    return coeffs.tolist()
+
+
+def extract_from_checkpoint(ckpt_path, out_dir, n_dct=8, per_layer=False):
+    """Extract spectra and directions from a nanoGPT checkpoint.
+
+    Always writes group-averaged spectra.json and directions.pt. With per_layer,
+    also writes spectra_per_layer.json (name→DCT coeffs) so a student can imprint
+    each matrix's own spectrum instead of the group average."""
     os.makedirs(out_dir, exist_ok=True)
 
     print(f'Loading checkpoint: {ckpt_path}')
@@ -61,6 +79,7 @@ def extract_from_checkpoint(ckpt_path, out_dir, n_dct=8):
     # Extract per-layer SVD
     group_svs = {}
     directions = {}
+    per_layer_spectra = {}
 
     with torch.no_grad():
         for name, param in model.named_parameters():
@@ -75,6 +94,8 @@ def extract_from_checkpoint(ckpt_path, out_dir, n_dct=8):
             s_norm = s / s.max() if s.max() > 0 else s
 
             group_svs.setdefault(group, []).append(s_norm.numpy())
+            if per_layer:
+                per_layer_spectra[name] = _dct_fit(s_norm.numpy(), n_dct)
             directions[name] = {
                 'U': U, 'Vt': Vt,
                 'group': group, 'shape': list(W.shape),
@@ -107,6 +128,12 @@ def extract_from_checkpoint(ckpt_path, out_dir, n_dct=8):
     with open(spectra_path, 'w') as f:
         json.dump(spectra, f, indent=2)
     print(f'Saved spectra: {spectra_path}')
+
+    if per_layer:
+        pl_path = os.path.join(out_dir, 'spectra_per_layer.json')
+        with open(pl_path, 'w') as f:
+            json.dump(per_layer_spectra, f, indent=2)
+        print(f'Saved per-layer spectra: {pl_path} ({len(per_layer_spectra)} matrices)')
 
     dirs_path = os.path.join(out_dir, 'directions.pt')
     torch.save(directions, dirs_path)
@@ -197,10 +224,13 @@ if __name__ == '__main__':
     parser.add_argument('--hf', type=str, help='HuggingFace model name (e.g. gpt2)')
     parser.add_argument('--out', type=str, default='.prism_cache/extracted')
     parser.add_argument('--n_dct', type=int, default=8, help='DCT coefficients per group (default 8 = 128 bytes)')
+    parser.add_argument('--per_layer', action='store_true',
+                        help='also write spectra_per_layer.json (name→coeffs)')
     args = parser.parse_args()
 
     if args.ckpt:
-        extract_from_checkpoint(args.ckpt, args.out, n_dct=args.n_dct)
+        extract_from_checkpoint(args.ckpt, args.out, n_dct=args.n_dct,
+                                per_layer=args.per_layer)
     elif args.hf:
         extract_from_pretrained_hf(args.hf, args.out)
     else:
