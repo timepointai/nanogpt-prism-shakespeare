@@ -16,6 +16,7 @@ Best config from CUDA sweep (April 2026):
 The pretrained spectra are extracted once and cached to disk.
 """
 import os
+import re
 import json
 import math
 import gc
@@ -40,13 +41,113 @@ def dct_expand(coeffs, n):
 
 
 def blend_orthogonal(A, B, alpha):
-    """Blend two orthogonal matrices, re-orthogonalized via SVD."""
+    """Blend two orthogonal matrices, re-orthogonalized via SVD.
+
+    Pairs columns by INDEX — the original EigenTransfer operation. Kept as the
+    default so existing runs reproduce exactly."""
     blended = (1 - alpha) * A + alpha * B
     try:
         U, _, Vt = torch.linalg.svd(blended, full_matrices=False)
         return U @ Vt
     except torch._C._LinAlgError:
         return A
+
+
+# ── Subspace-aware direction transfer (opt-in) ──
+#
+# The flat blend above pairs the student's i-th singular vector with the teacher's
+# i-th and mixes them linearly. Two problems it doesn't address, and the tools for
+# each:
+#   • directions are paired by index, not by geometric proximity   → grassmann_interp
+#   • one global strength for every layer/matrix                    → subspace_alignment
+# All of this is gated behind non-default apply_prism args; the recipe path is
+# untouched.
+
+def _principal(A, B):
+    """Principal cosines between the column spaces of two column-orthonormal
+    matrices. Returns (P, cos, Q): A@P and B@Q are the paired principal
+    directions, cos = cos(principal angles), descending."""
+    M = A.transpose(-2, -1) @ B
+    P, c, Qt = torch.linalg.svd(M, full_matrices=False)
+    return P, torch.clamp(c, -1.0, 1.0), Qt.transpose(-2, -1)
+
+
+def subspace_alignment(A, B, k=0, rows=False):
+    """Mean cosine of the principal angles between the top-k subspaces of A and B
+    (1.0 = identical subspace, 0.0 = orthogonal). A geometric similarity, used to
+    set the transfer strength adaptively: transfer MORE where the student is far
+    from the teacher, less where it already agrees."""
+    if rows:
+        A, B = A.transpose(-2, -1), B.transpose(-2, -1)
+    if k and 0 < k < A.shape[1]:
+        A, B = A[:, :k], B[:, :k]
+    _, c, _ = _principal(A, B)
+    return float(c.mean())
+
+
+def grassmann_interp(A, B, alpha, rows=False):
+    """Geodesic interpolation from orthonormal A toward B, fraction alpha∈[0,1],
+    along the Grassmann/Stiefel manifold. Pairs principal directions FIRST, then
+    rotates each pair through its own principal angle — so directions are matched
+    by geometry, not by index. alpha=0 → A's subspace, alpha=1 → B's subspace.
+    alpha may be a scalar or a per-direction vector (for top-k transfer)."""
+    if rows:
+        return grassmann_interp(A.transpose(-2, -1), B.transpose(-2, -1),
+                                alpha, rows=False).transpose(-2, -1)
+    try:
+        P, cos, Q = _principal(A, B)
+    except torch._C._LinAlgError:
+        return A
+    A_p = A @ P
+    B_p = B @ Q
+    theta = torch.arccos(cos)
+    perp = B_p - A_p * cos
+    perp = perp / torch.clamp(torch.linalg.norm(perp, dim=0, keepdim=True), min=1e-8)
+    if not torch.is_tensor(alpha):
+        alpha = torch.as_tensor(float(alpha), device=A.device, dtype=A.dtype)
+    a = alpha.to(A.dtype)
+    X = A_p * torch.cos(a * theta) + perp * torch.sin(a * theta)
+    U, _, Vt = torch.linalg.svd(X, full_matrices=False)
+    return U @ Vt
+
+
+def align_directions(fresh, pre, alpha, mode='linear', topk=0, rows=False):
+    """Transfer teacher directions into a fresh orthonormal frame.
+
+    mode='linear'    — index-paired blend + re-orth (blend_orthogonal; the default)
+    mode='grassmann' — principal-angle geodesic (directions matched by geometry)
+    topk>0           — only the leading k singular directions are moved; the tail
+                       stays fresh (the top-k structural transfer). The whole
+                       frame is re-orthonormalized so the kept tail stays valid.
+    rows=True        — operate on the row space (for Vt)."""
+    if rows:
+        return align_directions(fresh.transpose(-2, -1), pre.transpose(-2, -1),
+                                alpha, mode, topk, rows=False).transpose(-2, -1)
+
+    def core(f, p):
+        if mode == 'grassmann':
+            return grassmann_interp(f, p, alpha)
+        return blend_orthogonal(f, p, float(alpha))
+
+    r = fresh.shape[1]
+    if topk and 0 < topk < r:
+        head = core(fresh[:, :topk], pre[:, :topk])
+        combined = torch.cat([head, fresh[:, topk:]], dim=1)
+        try:
+            U, _, Vt = torch.linalg.svd(combined, full_matrices=False)
+            return U @ Vt
+        except torch._C._LinAlgError:
+            return fresh
+    return core(fresh, pre)
+
+
+def _layer_depth_frac(name, n_layer):
+    """Fractional depth in [0,1] of a parameter from its 'h.<i>.' index, or None
+    for non-block params (embeddings). Used to taper transfer with depth."""
+    m = re.search(r'\bh\.(\d+)\.', name)
+    if m is None or n_layer <= 1:
+        return None
+    return int(m.group(1)) / (n_layer - 1)
 
 
 # ── Weight group classification (nanoGPT naming) ──
@@ -209,8 +310,27 @@ def extract_directions(force=False):
 
 # ── Application ──
 
+def _parse_align_spec(spec):
+    """Parse a per-group alignment spec 'attention:0.9,ffn_down:0.5' into a dict.
+    Accepts a dict unchanged, or None. Groups not named fall back to the scalar
+    align_strength."""
+    if spec is None or isinstance(spec, dict):
+        return spec
+    out = {}
+    for part in str(spec).split(','):
+        part = part.strip()
+        if not part:
+            continue
+        g, v = part.split(':')
+        out[g.strip()] = float(v)
+    return out
+
+
 def apply_prism(model, align_strength=0.75, lam=1.0,
-                spectra_path=None, directions_path=None, verbose=True):
+                spectra_path=None, directions_path=None, verbose=True,
+                align_spec=None, align_mode='linear', align_topk=0,
+                align_depth_gamma=0.0, per_layer_spectra_path=None,
+                n_layer=None):
     """Apply Prism initialization to a nanoGPT model.
 
     Spectral Imprint: reshape singular values to match extracted spectrum.
@@ -223,7 +343,35 @@ def apply_prism(model, align_strength=0.75, lam=1.0,
         spectra_path: path to spectra.json (if None, extracts from HF GPT-2)
         directions_path: path to directions.pt (if None, extracts from HF GPT-2)
         verbose: print per-matrix info
+
+    Opt-in transfer knobs (all default to the original behavior):
+        align_spec: per-group alignment, dict or 'attention:0.9,ffn_down:0.5,…';
+            groups unnamed fall back to align_strength.
+        align_mode: 'linear' (index-paired blend, the default) | 'grassmann'
+            (principal-angle geodesic) | 'subspace' (grassmann with the strength
+            set adaptively from how far the student is from the teacher).
+        align_topk: if >0, only the leading k singular directions are transferred;
+            the tail stays fresh (top-k structural transfer).
+        align_depth_gamma: taper alignment with layer depth — effective strength is
+            base·(1 − γ·depth_frac), so later (more data-specific) layers get less
+            teacher. 0 = uniform (default).
+        per_layer_spectra_path: path to a per-matrix spectra json (name→coeffs); if
+            present, each matrix uses its own spectrum instead of the group average.
+        n_layer: block count, for depth tapering (read from model config if None).
     """
+    align_spec = _parse_align_spec(align_spec)
+    if n_layer is None:
+        n_layer = getattr(getattr(model, 'config', None), 'n_layer', 0) or 0
+
+    # Optional per-matrix spectra (name → DCT coeffs), overriding the group average.
+    per_layer_spectra = {}
+    if per_layer_spectra_path and os.path.exists(per_layer_spectra_path):
+        with open(per_layer_spectra_path) as f:
+            per_layer_spectra = json.load(f)
+        if verbose:
+            print(f'[prism] Loaded per-layer spectra from {per_layer_spectra_path} '
+                  f'({len(per_layer_spectra)} matrices)')
+
     # Load spectra — from custom path or default HF GPT-2 extraction
     if spectra_path and os.path.exists(spectra_path):
         with open(spectra_path) as f:
@@ -234,7 +382,8 @@ def apply_prism(model, align_strength=0.75, lam=1.0,
         spectra = extract_spectra()
 
     # Load directions — from custom path or default HF GPT-2 extraction
-    if align_strength > 0:
+    want_dirs = align_strength > 0 or bool(align_spec)
+    if want_dirs:
         if directions_path and os.path.exists(directions_path):
             directions = torch.load(directions_path, map_location='cpu', weights_only=False)
             if verbose:
@@ -262,8 +411,19 @@ def apply_prism(model, align_strength=0.75, lam=1.0,
                 n_skipped += 1
                 continue
 
-            # Get DCT spectrum for this group
-            coeffs = spectra[group]
+            # Get DCT spectrum — per-matrix if available, else the group average
+            coeffs = per_layer_spectra.get(name, spectra[group])
+
+            # Effective alignment for this matrix: per-group override, then a
+            # depth taper. Defaults leave this equal to align_strength.
+            base = align_strength
+            if align_spec and group in align_spec:
+                base = align_spec[group]
+            if align_depth_gamma:
+                df = _layer_depth_frac(name, n_layer)
+                if df is not None:
+                    base = max(0.0, base * (1.0 - align_depth_gamma * df))
+
             W = param.data.float()
             orig_shape = W.shape
 
@@ -287,30 +447,55 @@ def apply_prism(model, align_strength=0.75, lam=1.0,
             # Directional alignment
             U_use = U_fresh
             Vt_use = Vt_fresh
+            eff_align = base
 
             # Find matching pretrained directions
             # nanoGPT name: h.0.attn.c_attn.weight → HF: h.0.attn.c_attn.weight
-            if align_strength > 0 and name in directions:
+            if base > 0 and name in directions:
                 ext = directions[name]
                 Vt_pre = ext['Vt'].to(W.device)
                 U_pre = ext['U'].to(W.device)
-                if Vt_pre.shape == Vt_fresh.shape:
-                    Vt_use = blend_orthogonal(Vt_fresh, Vt_pre, align_strength)
-                if U_pre.shape == U_fresh.shape:
-                    U_use = blend_orthogonal(U_fresh, U_pre, align_strength)
+                # 'subspace' mode: scale strength by how far the student already is
+                # from the teacher (transfer more into unaligned subspaces).
+                if align_mode == 'subspace' and Vt_pre.shape == Vt_fresh.shape:
+                    sa = subspace_alignment(Vt_fresh, Vt_pre, k=align_topk, rows=True)
+                    eff_align = base * (1.0 - sa)
+                core_mode = ('grassmann' if align_mode in ('grassmann', 'subspace')
+                             else 'linear')
+                if eff_align > 0:
+                    if Vt_pre.shape == Vt_fresh.shape:
+                        Vt_use = align_directions(Vt_fresh, Vt_pre, eff_align,
+                                                  mode=core_mode, topk=align_topk,
+                                                  rows=True)
+                    if U_pre.shape == U_fresh.shape:
+                        U_use = align_directions(U_fresh, U_pre, eff_align,
+                                                 mode=core_mode, topk=align_topk,
+                                                 rows=False)
 
             W_new = U_use @ torch.diag(s_new) @ Vt_use
             param.data = W_new.to(param.dtype)
             n_shaped += 1
 
             if verbose:
-                align_str = f'{align_strength:.2f}' if name in directions else 'n/a'
+                align_str = f'{eff_align:.2f}' if name in directions else 'n/a'
                 print(f'  [prism] {name:45s} {str(list(orig_shape)):>15s} '
                       f'{group:>10s} align={align_str}')
 
     if verbose:
         print(f'\n[prism] Shaped {n_shaped} matrices, skipped {n_skipped} params')
+        extra = []
+        if align_mode != 'linear':
+            extra.append(f'mode={align_mode}')
+        if align_topk:
+            extra.append(f'topk={align_topk}')
+        if align_depth_gamma:
+            extra.append(f'depth_gamma={align_depth_gamma}')
+        if align_spec:
+            extra.append(f'spec={align_spec}')
+        if per_layer_spectra:
+            extra.append('per_layer_spectra')
+        suffix = ('  [' + ', '.join(extra) + ']') if extra else ''
         print(f'[prism] Spectral Imprint (lam={lam}) + '
-              f'EigenTransfer (align={align_strength})')
+              f'EigenTransfer (align={align_strength}){suffix}')
 
     return n_shaped
