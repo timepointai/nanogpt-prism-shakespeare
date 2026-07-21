@@ -108,17 +108,32 @@ def run_eval(method: str, seeds: str, teacher_steps: int, student_steps: int,
 
 @app.local_entrypoint()
 def main(gpu: str = "L4", method: str = "recipe", seeds: str = "1337,1338,1339",
-         teacher_steps: int = 2000, student_steps: int = 5000, extra: str = ""):
+         teacher_steps: int = 2000, student_steps: int = 5000, extra: str = "",
+         wait: bool = False):
     # `extra` passes flags straight to prism_eval.py. The clean attribution test —
     # recipe at the baseline's schedule, so only the spectral flags differ:
-    #   modal run prism_modal.py --extra "--method_lr=1e-3 --method_warmup=100"
+    #   modal run --detach prism_modal.py --extra "--method_lr=1e-3 --method_warmup=100"
+    fn = run_eval.with_options(gpu=gpu)
+
+    if not wait:
+        # DEFAULT: fire-and-forget. spawn() returns in seconds, so there's no
+        # hour-long local streaming connection to drop — a flaky laptop network
+        # can't take the run down. With `modal run --detach` the spawned job runs
+        # to completion server-side. The eval resumes from banked stages, so a
+        # re-launch never recomputes a finished stage.
+        call = fn.spawn(method=method, seeds=seeds, teacher_steps=teacher_steps,
+                        student_steps=student_steps, extra=extra)
+        print(f"\nLaunched (detached, survives disconnects). call id: {call.object_id}")
+        print("Watch it:   modal app logs prism-eval")
+        print("When done, the artifact is on the Volume — fetch + commit it:")
+        print("  modal volume get prism-eval nanogpt-prism/results/latest.json ./results/")
+        return
+
+    # --wait: block, stream, and save the artifact locally. Only use this on a
+    # reliable connection; a drop here can still take the app down.
     import pathlib
-
-    # Bind the requested GPU at call time so --gpu works without editing code.
-    result = run_eval.with_options(gpu=gpu).remote(
-        method=method, seeds=seeds,
-        teacher_steps=teacher_steps, student_steps=student_steps, extra=extra)
-
+    result = fn.remote(method=method, seeds=seeds, teacher_steps=teacher_steps,
+                       student_steps=student_steps, extra=extra)
     out = pathlib.Path("results")
     out.mkdir(exist_ok=True)
     dest = out / result["name"]
