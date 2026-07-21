@@ -29,6 +29,16 @@ Eval artifacts. **This directory is the evidence.** Committed runs:
   caveat:** the student is scored on the *Shakespeare* val set in this protocol,
   so this shows the teacher-geometry init isn't washed out by far-domain
   training — it does not yet measure accelerated learning *of* the far domain.
+  Superseded by the `far_val` run below.
+- `recipe_20260721T161208Z.json` — **the cross-domain result** (`far_val: true`):
+  same sweep, but each student is scored on a val set mirroring its *own* train
+  mixture (pure held-out Sherlock at overlap 0.0). Sanity gate: the overlap-1.0
+  row reproduces the base protocol exactly. Δloss is flat-to-growing across
+  distance — 0.591 at overlap 1.0 → **0.627 at overlap 0.0** (recipe 1.786 vs.
+  baseline 2.414 on Sherlock val, 3 seeds, matched LR): a Shakespeare teacher's
+  geometry accelerates learning *of Sherlock* as much as it accelerates
+  Shakespeare. Scores ≥9–10× at every overlap (left-censored at this probe's
+  resolution). The head start is structural, and it transfers across domains.
 
 See [RESULTS.md](../RESULTS.md) for the full comparison and what remains open.
 
