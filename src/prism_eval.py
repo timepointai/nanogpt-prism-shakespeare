@@ -173,7 +173,7 @@ def _encode_corpus(path, meta_pkl):
     return np.array(toks, dtype=np.uint16)
 
 
-def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
+def setup(workdir=SRC_DIR, overlap=None, far_corpus=None, far_val=False):
     """Prepare dataset partitions. Returns (n_student_tokens, n_test_tokens, dist).
 
     overlap=None (default): teacher and student share the same 80% split —
@@ -187,8 +187,11 @@ def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
         overlap=1.0 → identical block set (same-data)
         overlap=0.0 → disjoint block sets (cross-data: nothing shared)
     This removes the slice-position/difficulty confound of a sliding window. The
-    student is always SCORED on the held-out Shakespeare val set. dist carries the
-    realized overlap plus the token-JS distance between the two arms' data."""
+    student is SCORED on the held-out Shakespeare val set by default; with
+    far_corpus + far_val=True it is scored on a val mixture mirroring its own
+    train mixture (held-out far text for the fresh fraction) — the accelerated-
+    learning-of-the-new-domain test. dist carries the realized overlap plus the
+    token-JS distance between the two arms' data."""
     os.chdir(workdir)
 
     if not os.path.exists('data/shakespeare_char/train.bin'):
@@ -200,6 +203,8 @@ def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
                               dtype=np.uint16, mode='r'))
     test_data = np.array(np.memmap('data/shakespeare_char/val.bin',
                                     dtype=np.uint16, mode='r'))
+    student_val = test_data
+    val_mix = None
     dist = None
 
     if overlap is None:
@@ -224,10 +229,32 @@ def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
             # structure-vs-content test (large token-JS), not just disjoint blocks
             # of the same Shakespeare.
             far = _encode_corpus(far_corpus, 'data/shakespeare_char/meta.pkl')
+            far_val_toks = None
+            if far_val:
+                # Reserve a held-out tail of the far corpus BEFORE any tiling, so
+                # the far val data is never seen in training even when the far
+                # text is shorter than the fresh-block budget.
+                n_res = min(len(far) // 10, len(test_data))
+                far_val_toks = far[-n_res:].astype(np.uint16)
+                far = far[:-n_res]
             need = n_fresh * blk
-            if len(far) < need:
+            if need and len(far) < need:
                 far = np.tile(far, int(np.ceil(need / len(far))))
             fresh = far[:need].astype(np.uint16)
+            if far_val_toks is not None:
+                # Score the student on its OWN data mixture: Shakespeare val in
+                # proportion to the shared blocks, held-out far text for the
+                # rest. overlap=1.0 → pure Shakespeare val (identical to the base
+                # protocol); overlap=0.0 → pure far-corpus val. This measures
+                # accelerated learning OF the student's domain — a Shakespeare
+                # val set would instead reward retaining the teacher's domain.
+                n_sh_val = int(round((n_shared / half) * len(test_data)))
+                n_fa_val = min(len(far_val_toks), len(test_data) - n_sh_val)
+                student_val = np.concatenate(
+                    [test_data[:n_sh_val].astype(np.uint16),
+                     far_val_toks[:n_fa_val]]).astype(np.uint16)
+                val_mix = {'shakespeare_tokens': int(n_sh_val),
+                           'far_tokens': int(n_fa_val)}
         else:
             fresh = blocks[other_idx[:n_fresh]].reshape(-1).astype(np.uint16)
         student_train = np.concatenate([shared, fresh]).astype(np.uint16)
@@ -236,13 +263,16 @@ def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
                 'overlap_realized': round(n_shared / half, 4),
                 'shared_blocks': n_shared, 'blocks_per_arm': half,
                 'far_corpus': os.path.basename(far_corpus) if far_corpus else None,
+                'far_val': bool(far_corpus and far_val),
                 'token_js': _token_js(teacher_train, student_train)}
+        if val_mix:
+            dist['val_mix'] = val_mix
         log(f'overlap={overlap:.2f}: {n_shared}/{half} blocks shared · '
             f'token-JS {dist["token_js"]:.4f} · '
             f'{"FAR corpus fresh blocks" if far_corpus else "random blocks across corpus"} '
             f'(difficulty controlled)', 2)
 
-    for name, train, val in [('shakespeare_eval', student_train, test_data),
+    for name, train, val in [('shakespeare_eval', student_train, student_val),
                               ('shakespeare_teacher', teacher_train, teacher_val)]:
         d = f'data/{name}'
         os.makedirs(d, exist_ok=True)
@@ -251,7 +281,7 @@ def setup(workdir=SRC_DIR, overlap=None, far_corpus=None):
         shutil.copy('data/shakespeare_char/meta.pkl',
                      os.path.join(d, 'meta.pkl'))
 
-    return len(student_train), len(test_data), dist
+    return len(student_train), len(student_val), dist
 
 
 def parse_curve(stdout):
@@ -694,6 +724,11 @@ def main():
     # — the real structure-vs-content test. Report advantage against token-JS.
     p.add_argument('--far_corpus', type=str, default=None,
                    help="path to a .txt corpus for the far (large-distance) student arm")
+    p.add_argument('--far_val', action='store_true',
+                   help="score the student on a val mixture mirroring its own train "
+                        "mixture (held-out far text for the fresh fraction) instead "
+                        "of the Shakespeare val set — measures accelerated learning "
+                        "OF the far domain rather than retention of the teacher's")
     # ── New transfer knobs (opt-in; recorded in the artifact and the run key) ──
     p.add_argument('--n_dct', type=int, default=None,
                    help="DCT coeffs for the spectral imprint (default 8); higher = truer spectrum")
@@ -762,6 +797,10 @@ def main():
         method_knobs['n_dct'] = args.n_dct
     if args.far_corpus:
         method_knobs['far_corpus'] = os.path.basename(args.far_corpus)
+    if args.far_val:
+        # Changes what BOTH arms are scored on — a far_val run must never resume
+        # onto (or be compared against) a Shakespeare-val run.
+        method_knobs['far_val'] = 1
 
     config = {
         'method': args.method,
@@ -784,6 +823,7 @@ def main():
         'n_dct': n_dct,
         'method_knobs': method_knobs,
         'far_corpus': args.far_corpus,
+        'far_val': args.far_val,
     }
 
     key = run_key(config)
@@ -856,7 +896,8 @@ def main():
 
         runs = []
         for overlap in sweep:
-            n_train, n_test, dist = setup(overlap=overlap, far_corpus=args.far_corpus)
+            n_train, n_test, dist = setup(overlap=overlap, far_corpus=args.far_corpus,
+                                          far_val=args.far_val)
             if dist is not None:
                 config['overlap_distances'][f'{overlap:g}'] = dist
             tag = 'eval' if overlap is None else 'rsweep'
