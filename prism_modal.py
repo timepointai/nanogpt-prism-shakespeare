@@ -124,7 +124,9 @@ def main(gpu: str = "L4", method: str = "recipe", seeds: str = "1337,1338,1339",
         call = fn.spawn(method=method, seeds=seeds, teacher_steps=teacher_steps,
                         student_steps=student_steps, extra=extra)
         print(f"\nLaunched (detached, survives disconnects). call id: {call.object_id}")
-        print("Watch it:   modal app logs prism-eval")
+        print("Watch it: open the dashboard URL above, or —")
+        print("  modal app list          # find the ephemeral (detached) app id")
+        print("  modal app logs <app-id> # NOTE: the app id (ap-...), not the name")
         print("When done, the artifact is on the Volume — fetch + commit it:")
         print("  modal volume get prism-eval nanogpt-prism/results/latest.json ./results/")
         return
