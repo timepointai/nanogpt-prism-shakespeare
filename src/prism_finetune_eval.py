@@ -285,8 +285,12 @@ def score_seed(arms):
 def run_key(a):
     seeds = '-'.join(str(s) for s in a.seeds)
     corpus = os.path.splitext(os.path.basename(a.far_corpus))[0]
+    # --tag disambiguates runs that share the schedule but differ in arm set (the
+    # key does NOT hash arms, so a bigger arm set on the same schedule would collide
+    # with / overwrite an earlier run's artifact without a distinct tag).
     return (f"ft_{corpus}_b{a.base_steps}_f{a.ft_steps}_e{a.eval_every}"
-            f"_lr{a.learning_rate}_bs{a.batch_size}_bl{a.block_size}_seeds{seeds}")
+            f"_lr{a.learning_rate}_bs{a.batch_size}_bl{a.block_size}_seeds{seeds}"
+            + (f"_{a.tag}" if a.tag else ''))
 
 
 def main():
@@ -312,6 +316,9 @@ def main():
     p.add_argument('--n_head', type=int, default=None)
     p.add_argument('--n_embd', type=int, default=None)
     p.add_argument('--device', default=None)
+    p.add_argument('--tag', default='',
+                   help='disambiguator folded into the run key / artifact (use a '
+                        'distinct tag when a new arm set shares a prior run schedule)')
     a = p.parse_args()
     a.seeds = [int(s) for s in a.seeds.split(',') if s.strip()]
     arms = [x for x in a.arms.split(',') if x.strip()]
