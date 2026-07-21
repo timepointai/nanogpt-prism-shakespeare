@@ -1,0 +1,2513 @@
+{
+  "schema": "prism-eval/1",
+  "partial": false,
+  "run_key": "recipe_t500_s100_e10_i40_seeds1337-1338-1339_mlr1e-3mw20_blrdefbw20_ov1-0.9-0.8-0.7-0.6-0.5-0.4-0.3-0.2-0.1-0.05-0",
+  "seeds_requested": [
+    1337,
+    1338,
+    1339
+  ],
+  "seeds_done": [
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339,
+    1337,
+    1338,
+    1339
+  ],
+  "provenance": {
+    "created_utc": "2026-07-21T05:28:27.815565+00:00",
+    "git_commit": "df8cd547ca8ce8a591f3bd26af1c26509b098dc7",
+    "git_dirty": true,
+    "python": "3.11.12",
+    "argv": [
+      "--method=recipe",
+      "--seeds=1337,1338,1339",
+      "--teacher_steps=2000",
+      "--student_steps=5000",
+      "--teacher_steps=500",
+      "--student_steps=100",
+      "--eval_every=10",
+      "--eval_iters=40",
+      "--batch_size=32",
+      "--method_lr=1e-3",
+      "--method_warmup=20",
+      "--baseline_warmup=20",
+      "--overlap=1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.05,0.0"
+    ],
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA L4"
+  },
+  "config": {
+    "method": "recipe",
+    "teacher_steps": 500,
+    "student_steps": 100,
+    "eval_every": 10,
+    "eval_iters": 40,
+    "seeds": [
+      1337,
+      1338,
+      1339
+    ],
+    "device": "cuda",
+    "overlaps": [
+      1.0,
+      0.9,
+      0.8,
+      0.7,
+      0.6,
+      0.5,
+      0.4,
+      0.3,
+      0.2,
+      0.1,
+      0.05,
+      0.0
+    ],
+    "overlap_distances": {
+      "1": {
+        "overlap_requested": 1.0,
+        "overlap_realized": 1.0,
+        "shared_blocks": 50,
+        "blocks_per_arm": 50,
+        "token_js": 0.0
+      },
+      "0.9": {
+        "overlap_requested": 0.9,
+        "overlap_realized": 0.9,
+        "shared_blocks": 45,
+        "blocks_per_arm": 50,
+        "token_js": 3.1e-05
+      },
+      "0.8": {
+        "overlap_requested": 0.8,
+        "overlap_realized": 0.8,
+        "shared_blocks": 40,
+        "blocks_per_arm": 50,
+        "token_js": 9.5e-05
+      },
+      "0.7": {
+        "overlap_requested": 0.7,
+        "overlap_realized": 0.7,
+        "shared_blocks": 35,
+        "blocks_per_arm": 50,
+        "token_js": 0.000109
+      },
+      "0.6": {
+        "overlap_requested": 0.6,
+        "overlap_realized": 0.6,
+        "shared_blocks": 30,
+        "blocks_per_arm": 50,
+        "token_js": 0.000119
+      },
+      "0.5": {
+        "overlap_requested": 0.5,
+        "overlap_realized": 0.5,
+        "shared_blocks": 25,
+        "blocks_per_arm": 50,
+        "token_js": 0.000147
+      },
+      "0.4": {
+        "overlap_requested": 0.4,
+        "overlap_realized": 0.4,
+        "shared_blocks": 20,
+        "blocks_per_arm": 50,
+        "token_js": 0.000165
+      },
+      "0.3": {
+        "overlap_requested": 0.3,
+        "overlap_realized": 0.3,
+        "shared_blocks": 15,
+        "blocks_per_arm": 50,
+        "token_js": 0.000236
+      },
+      "0.2": {
+        "overlap_requested": 0.2,
+        "overlap_realized": 0.2,
+        "shared_blocks": 10,
+        "blocks_per_arm": 50,
+        "token_js": 0.000343
+      },
+      "0.1": {
+        "overlap_requested": 0.1,
+        "overlap_realized": 0.1,
+        "shared_blocks": 5,
+        "blocks_per_arm": 50,
+        "token_js": 0.00038
+      },
+      "0.05": {
+        "overlap_requested": 0.05,
+        "overlap_realized": 0.04,
+        "shared_blocks": 2,
+        "blocks_per_arm": 50,
+        "token_js": 0.000389
+      },
+      "0": {
+        "overlap_requested": 0.0,
+        "overlap_realized": 0.0,
+        "shared_blocks": 0,
+        "blocks_per_arm": 50,
+        "token_js": 0.000431
+      }
+    },
+    "batch_size": 32,
+    "teacher_data_equals_student_data": false,
+    "method_lr": "1e-3",
+    "method_warmup": 20,
+    "baseline_lr": null,
+    "baseline_warmup": 20,
+    "schedule_matched": true
+  },
+  "runs": [
+    {
+      "seed": 1337,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9172,
+          "20": 2.6169,
+          "30": 2.5476,
+          "40": 2.5237,
+          "50": 2.4956,
+          "60": 2.5039,
+          "70": 2.5035,
+          "80": 2.4848,
+          "90": 2.4736,
+          "100": 2.4563
+        },
+        "best": 2.4563,
+        "best_step": 100,
+        "at_end": 2.4563,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3234,
+          "20": 2.1336,
+          "30": 2.0244,
+          "40": 1.9607,
+          "50": 1.9446,
+          "60": 1.9144,
+          "70": 1.8976,
+          "80": 1.8819,
+          "90": 1.8883,
+          "100": 1.8831
+        },
+        "best": 1.8819,
+        "best_step": 80,
+        "at_end": 1.8831,
+        "wall_sec": 22.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4563,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.943,
+          "20": 2.6242,
+          "30": 2.5819,
+          "40": 2.5236,
+          "50": 2.5053,
+          "60": 2.5025,
+          "70": 2.5064,
+          "80": 2.5114,
+          "90": 2.4774,
+          "100": 2.4691
+        },
+        "best": 2.4691,
+        "best_step": 100,
+        "at_end": 2.4691,
+        "wall_sec": 20.3,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.2922,
+          "20": 2.1038,
+          "30": 1.9977,
+          "40": 1.9377,
+          "50": 1.9167,
+          "60": 1.9136,
+          "70": 1.9031,
+          "80": 1.8856,
+          "90": 1.8608,
+          "100": 1.8961
+        },
+        "best": 1.8608,
+        "best_step": 90,
+        "at_end": 1.8961,
+        "wall_sec": 22.3,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4691,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 1.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8905,
+          "20": 2.6084,
+          "30": 2.5571,
+          "40": 2.5162,
+          "50": 2.5079,
+          "60": 2.4895,
+          "70": 2.5036,
+          "80": 2.4917,
+          "90": 2.4838,
+          "100": 2.477
+        },
+        "best": 2.477,
+        "best_step": 100,
+        "at_end": 2.477,
+        "wall_sec": 19.6,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3089,
+          "20": 2.0944,
+          "30": 2.0031,
+          "40": 1.97,
+          "50": 1.9187,
+          "60": 1.9207,
+          "70": 1.8967,
+          "80": 1.8915,
+          "90": 1.8845,
+          "100": 1.8825
+        },
+        "best": 1.8825,
+        "best_step": 100,
+        "at_end": 1.8825,
+        "wall_sec": 21.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.477,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.9,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9253,
+          "20": 2.6225,
+          "30": 2.549,
+          "40": 2.5312,
+          "50": 2.5018,
+          "60": 2.5146,
+          "70": 2.5091,
+          "80": 2.4943,
+          "90": 2.4919,
+          "100": 2.4658
+        },
+        "best": 2.4658,
+        "best_step": 100,
+        "at_end": 2.4658,
+        "wall_sec": 21.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3263,
+          "20": 2.1295,
+          "30": 2.0271,
+          "40": 1.9758,
+          "50": 1.948,
+          "60": 1.9239,
+          "70": 1.9303,
+          "80": 1.8982,
+          "90": 1.9036,
+          "100": 1.9078
+        },
+        "best": 1.8982,
+        "best_step": 80,
+        "at_end": 1.9078,
+        "wall_sec": 22.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4658,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.9,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.98,
+          "20": 2.6353,
+          "30": 2.5707,
+          "40": 2.5387,
+          "50": 2.5073,
+          "60": 2.4976,
+          "70": 2.5151,
+          "80": 2.5056,
+          "90": 2.4872,
+          "100": 2.4856
+        },
+        "best": 2.4856,
+        "best_step": 100,
+        "at_end": 2.4856,
+        "wall_sec": 21.6,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3503,
+          "20": 2.1189,
+          "30": 2.0033,
+          "40": 1.9581,
+          "50": 1.9312,
+          "60": 1.9286,
+          "70": 1.9127,
+          "80": 1.9137,
+          "90": 1.8854,
+          "100": 1.8935
+        },
+        "best": 1.8854,
+        "best_step": 90,
+        "at_end": 1.8935,
+        "wall_sec": 23.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4856,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.9,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8688,
+          "20": 2.6035,
+          "30": 2.5535,
+          "40": 2.5312,
+          "50": 2.5202,
+          "60": 2.4947,
+          "70": 2.5054,
+          "80": 2.5042,
+          "90": 2.4967,
+          "100": 2.4888
+        },
+        "best": 2.4888,
+        "best_step": 100,
+        "at_end": 2.4888,
+        "wall_sec": 19.8,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3008,
+          "20": 2.1209,
+          "30": 2.0148,
+          "40": 1.9738,
+          "50": 1.9305,
+          "60": 1.9396,
+          "70": 1.9116,
+          "80": 1.9029,
+          "90": 1.9175,
+          "100": 1.9052
+        },
+        "best": 1.9029,
+        "best_step": 80,
+        "at_end": 1.9052,
+        "wall_sec": 21.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4888,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.8,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9139,
+          "20": 2.641,
+          "30": 2.56,
+          "40": 2.5299,
+          "50": 2.5114,
+          "60": 2.5179,
+          "70": 2.5098,
+          "80": 2.4919,
+          "90": 2.4807,
+          "100": 2.4701
+        },
+        "best": 2.4701,
+        "best_step": 100,
+        "at_end": 2.4701,
+        "wall_sec": 20.1,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3294,
+          "20": 2.1321,
+          "30": 2.0326,
+          "40": 1.9862,
+          "50": 1.9638,
+          "60": 1.9442,
+          "70": 1.941,
+          "80": 1.9222,
+          "90": 1.918,
+          "100": 1.9266
+        },
+        "best": 1.918,
+        "best_step": 90,
+        "at_end": 1.9266,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4701,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.8,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9666,
+          "20": 2.6175,
+          "30": 2.5568,
+          "40": 2.5298,
+          "50": 2.5049,
+          "60": 2.5079,
+          "70": 2.505,
+          "80": 2.5165,
+          "90": 2.4952,
+          "100": 2.4851
+        },
+        "best": 2.4851,
+        "best_step": 100,
+        "at_end": 2.4851,
+        "wall_sec": 19.6,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.2873,
+          "20": 2.1051,
+          "30": 2.009,
+          "40": 1.9767,
+          "50": 1.9461,
+          "60": 1.943,
+          "70": 1.935,
+          "80": 1.9306,
+          "90": 1.9206,
+          "100": 1.9295
+        },
+        "best": 1.9206,
+        "best_step": 90,
+        "at_end": 1.9295,
+        "wall_sec": 22.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4851,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.8,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8741,
+          "20": 2.6234,
+          "30": 2.5514,
+          "40": 2.5327,
+          "50": 2.5182,
+          "60": 2.5019,
+          "70": 2.5107,
+          "80": 2.5081,
+          "90": 2.5017,
+          "100": 2.4911
+        },
+        "best": 2.4911,
+        "best_step": 100,
+        "at_end": 2.4911,
+        "wall_sec": 22.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3119,
+          "20": 2.1238,
+          "30": 2.0233,
+          "40": 1.9881,
+          "50": 1.9538,
+          "60": 1.9523,
+          "70": 1.93,
+          "80": 1.9263,
+          "90": 1.9228,
+          "100": 1.9218
+        },
+        "best": 1.9218,
+        "best_step": 100,
+        "at_end": 1.9218,
+        "wall_sec": 22.0,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4911,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.7,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9772,
+          "20": 2.6467,
+          "30": 2.5529,
+          "40": 2.5321,
+          "50": 2.5118,
+          "60": 2.5192,
+          "70": 2.5074,
+          "80": 2.503,
+          "90": 2.4868,
+          "100": 2.4831
+        },
+        "best": 2.4831,
+        "best_step": 100,
+        "at_end": 2.4831,
+        "wall_sec": 20.1,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3199,
+          "20": 2.1311,
+          "30": 2.0226,
+          "40": 1.974,
+          "50": 1.9671,
+          "60": 1.9518,
+          "70": 1.946,
+          "80": 1.9213,
+          "90": 1.9248,
+          "100": 1.9175
+        },
+        "best": 1.9175,
+        "best_step": 100,
+        "at_end": 1.9175,
+        "wall_sec": 21.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4831,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.7,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 3.0426,
+          "20": 2.6396,
+          "30": 2.5788,
+          "40": 2.5397,
+          "50": 2.5119,
+          "60": 2.5145,
+          "70": 2.5167,
+          "80": 2.5136,
+          "90": 2.505,
+          "100": 2.4923
+        },
+        "best": 2.4923,
+        "best_step": 100,
+        "at_end": 2.4923,
+        "wall_sec": 19.7,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.286,
+          "20": 2.1168,
+          "30": 2.0019,
+          "40": 1.9666,
+          "50": 1.9592,
+          "60": 1.9396,
+          "70": 1.9259,
+          "80": 1.9156,
+          "90": 1.9196,
+          "100": 1.9074
+        },
+        "best": 1.9074,
+        "best_step": 100,
+        "at_end": 1.9074,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4923,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.7,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.9899,
+          "20": 2.6171,
+          "30": 2.5621,
+          "40": 2.5329,
+          "50": 2.5209,
+          "60": 2.5109,
+          "70": 2.5111,
+          "80": 2.5115,
+          "90": 2.4959,
+          "100": 2.5002
+        },
+        "best": 2.4959,
+        "best_step": 90,
+        "at_end": 2.5002,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3035,
+          "20": 2.1485,
+          "30": 2.0379,
+          "40": 1.9825,
+          "50": 1.9579,
+          "60": 1.9553,
+          "70": 1.9154,
+          "80": 1.9192,
+          "90": 1.9341,
+          "100": 1.9117
+        },
+        "best": 1.9117,
+        "best_step": 100,
+        "at_end": 1.9117,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4959,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.6,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9855,
+          "20": 2.6313,
+          "30": 2.5521,
+          "40": 2.5335,
+          "50": 2.509,
+          "60": 2.5113,
+          "70": 2.514,
+          "80": 2.4936,
+          "90": 2.4807,
+          "100": 2.4751
+        },
+        "best": 2.4751,
+        "best_step": 100,
+        "at_end": 2.4751,
+        "wall_sec": 19.7,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3376,
+          "20": 2.1295,
+          "30": 2.0141,
+          "40": 1.9931,
+          "50": 1.9592,
+          "60": 1.9528,
+          "70": 1.9227,
+          "80": 1.9119,
+          "90": 1.9044,
+          "100": 1.9108
+        },
+        "best": 1.9044,
+        "best_step": 90,
+        "at_end": 1.9108,
+        "wall_sec": 21.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4751,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.6,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9793,
+          "20": 2.6207,
+          "30": 2.5641,
+          "40": 2.5364,
+          "50": 2.5172,
+          "60": 2.5011,
+          "70": 2.4975,
+          "80": 2.5082,
+          "90": 2.4864,
+          "100": 2.5039
+        },
+        "best": 2.4864,
+        "best_step": 90,
+        "at_end": 2.5039,
+        "wall_sec": 19.7,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3592,
+          "20": 2.1315,
+          "30": 2.0256,
+          "40": 1.9634,
+          "50": 1.9575,
+          "60": 1.9555,
+          "70": 1.9201,
+          "80": 1.9117,
+          "90": 1.9089,
+          "100": 1.914
+        },
+        "best": 1.9089,
+        "best_step": 90,
+        "at_end": 1.914,
+        "wall_sec": 21.5,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4864,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.6,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.9539,
+          "20": 2.6314,
+          "30": 2.5651,
+          "40": 2.5347,
+          "50": 2.517,
+          "60": 2.4924,
+          "70": 2.5022,
+          "80": 2.5063,
+          "90": 2.4821,
+          "100": 2.4807
+        },
+        "best": 2.4807,
+        "best_step": 100,
+        "at_end": 2.4807,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3181,
+          "20": 2.1341,
+          "30": 2.0304,
+          "40": 1.9872,
+          "50": 1.947,
+          "60": 1.9328,
+          "70": 1.9304,
+          "80": 1.9196,
+          "90": 1.9154,
+          "100": 1.9069
+        },
+        "best": 1.9069,
+        "best_step": 100,
+        "at_end": 1.9069,
+        "wall_sec": 22.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4807,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9378,
+          "20": 2.6422,
+          "30": 2.5519,
+          "40": 2.5382,
+          "50": 2.5108,
+          "60": 2.5129,
+          "70": 2.5036,
+          "80": 2.4928,
+          "90": 2.4919,
+          "100": 2.4898
+        },
+        "best": 2.4898,
+        "best_step": 100,
+        "at_end": 2.4898,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3514,
+          "20": 2.1399,
+          "30": 2.0175,
+          "40": 1.9758,
+          "50": 1.9531,
+          "60": 1.9386,
+          "70": 1.9208,
+          "80": 1.9135,
+          "90": 1.9148,
+          "100": 1.9116
+        },
+        "best": 1.9116,
+        "best_step": 100,
+        "at_end": 1.9116,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4898,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9215,
+          "20": 2.6204,
+          "30": 2.546,
+          "40": 2.5275,
+          "50": 2.5113,
+          "60": 2.5099,
+          "70": 2.4932,
+          "80": 2.4891,
+          "90": 2.4853,
+          "100": 2.4819
+        },
+        "best": 2.4819,
+        "best_step": 100,
+        "at_end": 2.4819,
+        "wall_sec": 20.3,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3142,
+          "20": 2.1264,
+          "30": 2.0005,
+          "40": 1.9573,
+          "50": 1.9284,
+          "60": 1.9352,
+          "70": 1.9184,
+          "80": 1.9086,
+          "90": 1.8947,
+          "100": 1.8896
+        },
+        "best": 1.8896,
+        "best_step": 100,
+        "at_end": 1.8896,
+        "wall_sec": 21.5,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4819,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.5,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.9048,
+          "20": 2.6391,
+          "30": 2.5512,
+          "40": 2.5411,
+          "50": 2.5248,
+          "60": 2.4955,
+          "70": 2.4968,
+          "80": 2.4955,
+          "90": 2.494,
+          "100": 2.4955
+        },
+        "best": 2.494,
+        "best_step": 90,
+        "at_end": 2.4955,
+        "wall_sec": 19.3,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3152,
+          "20": 2.1362,
+          "30": 2.0302,
+          "40": 1.9861,
+          "50": 1.9339,
+          "60": 1.937,
+          "70": 1.9182,
+          "80": 1.9177,
+          "90": 1.9273,
+          "100": 1.9173
+        },
+        "best": 1.9173,
+        "best_step": 100,
+        "at_end": 1.9173,
+        "wall_sec": 21.3,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.494,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.4,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9459,
+          "20": 2.6182,
+          "30": 2.5473,
+          "40": 2.5353,
+          "50": 2.5099,
+          "60": 2.514,
+          "70": 2.4954,
+          "80": 2.4838,
+          "90": 2.4909,
+          "100": 2.5025
+        },
+        "best": 2.4838,
+        "best_step": 80,
+        "at_end": 2.5025,
+        "wall_sec": 19.2,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3439,
+          "20": 2.1602,
+          "30": 2.0217,
+          "40": 1.9837,
+          "50": 1.9541,
+          "60": 1.9461,
+          "70": 1.932,
+          "80": 1.919,
+          "90": 1.9355,
+          "100": 1.8999
+        },
+        "best": 1.8999,
+        "best_step": 100,
+        "at_end": 1.8999,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 8.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4838,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.4,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9369,
+          "20": 2.6572,
+          "30": 2.5539,
+          "40": 2.531,
+          "50": 2.5163,
+          "60": 2.5035,
+          "70": 2.4997,
+          "80": 2.5077,
+          "90": 2.4799,
+          "100": 2.4999
+        },
+        "best": 2.4799,
+        "best_step": 90,
+        "at_end": 2.4999,
+        "wall_sec": 19.7,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.285,
+          "20": 2.1137,
+          "30": 1.9942,
+          "40": 1.9659,
+          "50": 1.9504,
+          "60": 1.9352,
+          "70": 1.9297,
+          "80": 1.9123,
+          "90": 1.9182,
+          "100": 1.8993
+        },
+        "best": 1.8993,
+        "best_step": 100,
+        "at_end": 1.8993,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4799,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.4,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8755,
+          "20": 2.6186,
+          "30": 2.5469,
+          "40": 2.5436,
+          "50": 2.5132,
+          "60": 2.4967,
+          "70": 2.4965,
+          "80": 2.4993,
+          "90": 2.4812,
+          "100": 2.4819
+        },
+        "best": 2.4812,
+        "best_step": 90,
+        "at_end": 2.4819,
+        "wall_sec": 19.8,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3074,
+          "20": 2.1257,
+          "30": 2.032,
+          "40": 1.9776,
+          "50": 1.9367,
+          "60": 1.9485,
+          "70": 1.924,
+          "80": 1.9236,
+          "90": 1.9006,
+          "100": 1.9034
+        },
+        "best": 1.9006,
+        "best_step": 90,
+        "at_end": 1.9034,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4812,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.3,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9927,
+          "20": 2.6181,
+          "30": 2.5634,
+          "40": 2.5298,
+          "50": 2.5135,
+          "60": 2.5074,
+          "70": 2.4962,
+          "80": 2.4923,
+          "90": 2.501,
+          "100": 2.49
+        },
+        "best": 2.49,
+        "best_step": 100,
+        "at_end": 2.49,
+        "wall_sec": 20.2,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3107,
+          "20": 2.1566,
+          "30": 2.0337,
+          "40": 1.9955,
+          "50": 1.9636,
+          "60": 1.9554,
+          "70": 1.9384,
+          "80": 1.9355,
+          "90": 1.9067,
+          "100": 1.9152
+        },
+        "best": 1.9067,
+        "best_step": 90,
+        "at_end": 1.9152,
+        "wall_sec": 21.8,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.49,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.3,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9075,
+          "20": 2.6114,
+          "30": 2.5628,
+          "40": 2.5328,
+          "50": 2.5138,
+          "60": 2.5133,
+          "70": 2.5087,
+          "80": 2.5113,
+          "90": 2.4775,
+          "100": 2.4801
+        },
+        "best": 2.4775,
+        "best_step": 90,
+        "at_end": 2.4801,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.2979,
+          "20": 2.1288,
+          "30": 2.0075,
+          "40": 1.9749,
+          "50": 1.9475,
+          "60": 1.9327,
+          "70": 1.9156,
+          "80": 1.9061,
+          "90": 1.9044,
+          "100": 1.8996
+        },
+        "best": 1.8996,
+        "best_step": 100,
+        "at_end": 1.8996,
+        "wall_sec": 22.2,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4775,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.3,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.9183,
+          "20": 2.6229,
+          "30": 2.5553,
+          "40": 2.5276,
+          "50": 2.5145,
+          "60": 2.501,
+          "70": 2.5106,
+          "80": 2.4955,
+          "90": 2.4834,
+          "100": 2.4824
+        },
+        "best": 2.4824,
+        "best_step": 100,
+        "at_end": 2.4824,
+        "wall_sec": 20.2,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3364,
+          "20": 2.1193,
+          "30": 2.0296,
+          "40": 1.9762,
+          "50": 1.9534,
+          "60": 1.9447,
+          "70": 1.9247,
+          "80": 1.9176,
+          "90": 1.9102,
+          "100": 1.9188
+        },
+        "best": 1.9102,
+        "best_step": 90,
+        "at_end": 1.9188,
+        "wall_sec": 21.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4824,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.2,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9058,
+          "20": 2.6202,
+          "30": 2.5566,
+          "40": 2.5247,
+          "50": 2.5124,
+          "60": 2.4979,
+          "70": 2.5144,
+          "80": 2.5085,
+          "90": 2.4925,
+          "100": 2.4862
+        },
+        "best": 2.4862,
+        "best_step": 100,
+        "at_end": 2.4862,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3324,
+          "20": 2.1463,
+          "30": 2.0382,
+          "40": 1.9904,
+          "50": 1.9655,
+          "60": 1.9448,
+          "70": 1.9388,
+          "80": 1.9351,
+          "90": 1.9188,
+          "100": 1.9172
+        },
+        "best": 1.9172,
+        "best_step": 100,
+        "at_end": 1.9172,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4862,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.2,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9446,
+          "20": 2.6395,
+          "30": 2.5508,
+          "40": 2.5262,
+          "50": 2.5077,
+          "60": 2.5015,
+          "70": 2.5002,
+          "80": 2.5067,
+          "90": 2.5014,
+          "100": 2.4868
+        },
+        "best": 2.4868,
+        "best_step": 100,
+        "at_end": 2.4868,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.305,
+          "20": 2.1105,
+          "30": 2.0035,
+          "40": 1.9618,
+          "50": 1.9387,
+          "60": 1.9223,
+          "70": 1.9114,
+          "80": 1.9148,
+          "90": 1.9132,
+          "100": 1.9219
+        },
+        "best": 1.9114,
+        "best_step": 70,
+        "at_end": 1.9219,
+        "wall_sec": 21.2,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4868,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.2,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8787,
+          "20": 2.6173,
+          "30": 2.5465,
+          "40": 2.5241,
+          "50": 2.5048,
+          "60": 2.5038,
+          "70": 2.4911,
+          "80": 2.4927,
+          "90": 2.5024,
+          "100": 2.4809
+        },
+        "best": 2.4809,
+        "best_step": 100,
+        "at_end": 2.4809,
+        "wall_sec": 20.0,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3128,
+          "20": 2.1178,
+          "30": 2.0143,
+          "40": 1.9705,
+          "50": 1.9572,
+          "60": 1.9548,
+          "70": 1.9119,
+          "80": 1.9107,
+          "90": 1.9014,
+          "100": 1.9237
+        },
+        "best": 1.9014,
+        "best_step": 90,
+        "at_end": 1.9237,
+        "wall_sec": 21.9,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4809,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.1,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.8881,
+          "20": 2.6287,
+          "30": 2.5352,
+          "40": 2.5254,
+          "50": 2.5151,
+          "60": 2.501,
+          "70": 2.4925,
+          "80": 2.4846,
+          "90": 2.486,
+          "100": 2.4891
+        },
+        "best": 2.4846,
+        "best_step": 80,
+        "at_end": 2.4891,
+        "wall_sec": 19.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.315,
+          "20": 2.159,
+          "30": 2.0305,
+          "40": 1.9888,
+          "50": 1.9732,
+          "60": 1.9591,
+          "70": 1.9358,
+          "80": 1.9364,
+          "90": 1.9224,
+          "100": 1.9206
+        },
+        "best": 1.9206,
+        "best_step": 100,
+        "at_end": 1.9206,
+        "wall_sec": 21.4,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 8.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4846,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.1,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9865,
+          "20": 2.6272,
+          "30": 2.5601,
+          "40": 2.5207,
+          "50": 2.5157,
+          "60": 2.518,
+          "70": 2.4935,
+          "80": 2.5105,
+          "90": 2.5023,
+          "100": 2.5035
+        },
+        "best": 2.4935,
+        "best_step": 70,
+        "at_end": 2.5035,
+        "wall_sec": 18.8,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3054,
+          "20": 2.1148,
+          "30": 2.014,
+          "40": 1.9741,
+          "50": 1.9568,
+          "60": 1.9208,
+          "70": 1.912,
+          "80": 1.933,
+          "90": 1.9084,
+          "100": 1.9104
+        },
+        "best": 1.9084,
+        "best_step": 90,
+        "at_end": 1.9104,
+        "wall_sec": 21.1,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 7.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4935,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.1,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8987,
+          "20": 2.6081,
+          "30": 2.5556,
+          "40": 2.5344,
+          "50": 2.5188,
+          "60": 2.5094,
+          "70": 2.4829,
+          "80": 2.4896,
+          "90": 2.4881,
+          "100": 2.4816
+        },
+        "best": 2.4816,
+        "best_step": 100,
+        "at_end": 2.4816,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3248,
+          "20": 2.1285,
+          "30": 2.0334,
+          "40": 1.9747,
+          "50": 1.9561,
+          "60": 1.9295,
+          "70": 1.9239,
+          "80": 1.9151,
+          "90": 1.9086,
+          "100": 1.9221
+        },
+        "best": 1.9086,
+        "best_step": 90,
+        "at_end": 1.9221,
+        "wall_sec": 21.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4816,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.05,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 2.9359,
+          "20": 2.6155,
+          "30": 2.5529,
+          "40": 2.5292,
+          "50": 2.5158,
+          "60": 2.5051,
+          "70": 2.4974,
+          "80": 2.4906,
+          "90": 2.4856,
+          "100": 2.4831
+        },
+        "best": 2.4831,
+        "best_step": 100,
+        "at_end": 2.4831,
+        "wall_sec": 20.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3193,
+          "20": 2.1573,
+          "30": 2.0213,
+          "40": 1.9967,
+          "50": 1.9578,
+          "60": 1.9441,
+          "70": 1.9313,
+          "80": 1.9483,
+          "90": 1.9281,
+          "100": 1.9159
+        },
+        "best": 1.9159,
+        "best_step": 100,
+        "at_end": 1.9159,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4831,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.05,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 3.0318,
+          "20": 2.6447,
+          "30": 2.5776,
+          "40": 2.5283,
+          "50": 2.5152,
+          "60": 2.5072,
+          "70": 2.4986,
+          "80": 2.5113,
+          "90": 2.4812,
+          "100": 2.4935
+        },
+        "best": 2.4812,
+        "best_step": 90,
+        "at_end": 2.4935,
+        "wall_sec": 19.6,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3191,
+          "20": 2.1094,
+          "30": 2.0038,
+          "40": 1.9689,
+          "50": 1.9484,
+          "60": 1.9336,
+          "70": 1.9115,
+          "80": 1.9253,
+          "90": 1.8955,
+          "100": 1.9086
+        },
+        "best": 1.8955,
+        "best_step": 90,
+        "at_end": 1.9086,
+        "wall_sec": 21.4,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4812,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.05,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.8947,
+          "20": 2.6158,
+          "30": 2.5571,
+          "40": 2.5196,
+          "50": 2.5085,
+          "60": 2.501,
+          "70": 2.5092,
+          "80": 2.508,
+          "90": 2.4864,
+          "100": 2.4817
+        },
+        "best": 2.4817,
+        "best_step": 100,
+        "at_end": 2.4817,
+        "wall_sec": 19.5,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3359,
+          "20": 2.1329,
+          "30": 2.015,
+          "40": 1.9686,
+          "50": 1.9505,
+          "60": 1.934,
+          "70": 1.9284,
+          "80": 1.9229,
+          "90": 1.9299,
+          "100": 1.9195
+        },
+        "best": 1.9195,
+        "best_step": 100,
+        "at_end": 1.9195,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4817,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1337,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2831,
+          "10": 3.0155,
+          "20": 2.6281,
+          "30": 2.5537,
+          "40": 2.5306,
+          "50": 2.5174,
+          "60": 2.5024,
+          "70": 2.5002,
+          "80": 2.4897,
+          "90": 2.4812,
+          "100": 2.4771
+        },
+        "best": 2.4771,
+        "best_step": 100,
+        "at_end": 2.4771,
+        "wall_sec": 19.9,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8045,
+          "10": 2.3195,
+          "20": 2.1553,
+          "30": 2.047,
+          "40": 1.9825,
+          "50": 1.9637,
+          "60": 1.9391,
+          "70": 1.927,
+          "80": 1.9186,
+          "90": 1.9203,
+          "100": 1.9034
+        },
+        "best": 1.9034,
+        "best_step": 100,
+        "at_end": 1.9034,
+        "wall_sec": 21.6,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4771,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1338,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2292,
+          "10": 2.9845,
+          "20": 2.6377,
+          "30": 2.5711,
+          "40": 2.5404,
+          "50": 2.5115,
+          "60": 2.4921,
+          "70": 2.494,
+          "80": 2.525,
+          "90": 2.5019,
+          "100": 2.4845
+        },
+        "best": 2.4845,
+        "best_step": 100,
+        "at_end": 2.4845,
+        "wall_sec": 19.1,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.7663,
+          "10": 2.3192,
+          "20": 2.1357,
+          "30": 2.0221,
+          "40": 1.9625,
+          "50": 1.9596,
+          "60": 1.9405,
+          "70": 1.9355,
+          "80": 1.9264,
+          "90": 1.8982,
+          "100": 1.9173
+        },
+        "best": 1.8982,
+        "best_step": 90,
+        "at_end": 1.9173,
+        "wall_sec": 21.7,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 10.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4845,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    },
+    {
+      "seed": 1339,
+      "overlap": 0.0,
+      "baseline": {
+        "curve": {
+          "0": 4.2414,
+          "10": 2.9656,
+          "20": 2.6105,
+          "30": 2.5471,
+          "40": 2.5346,
+          "50": 2.512,
+          "60": 2.5162,
+          "70": 2.4886,
+          "80": 2.5088,
+          "90": 2.4812,
+          "100": 2.4972
+        },
+        "best": 2.4812,
+        "best_step": 90,
+        "at_end": 2.4972,
+        "wall_sec": 19.4,
+        "overfits": false
+      },
+      "method": {
+        "curve": {
+          "0": 2.8144,
+          "10": 2.3084,
+          "20": 2.1425,
+          "30": 2.0321,
+          "40": 1.9769,
+          "50": 1.9583,
+          "60": 1.9464,
+          "70": 1.9277,
+          "80": 1.9376,
+          "90": 1.9278,
+          "100": 1.9187
+        },
+        "best": 1.9187,
+        "best_step": 100,
+        "at_end": 1.9187,
+        "wall_sec": 21.0,
+        "overfits": false
+      },
+      "score": {
+        "prism_score": 9.0,
+        "hit_step": 10,
+        "reached_baseline_quality": true,
+        "baseline_target": 2.4812,
+        "left_censored": true,
+        "note": "score is a LOWER BOUND: target reached at first eval, true crossing unresolved below step 10"
+      }
+    }
+  ],
+  "summary": {
+    "by_overlap": {
+      "1": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4691,
+          "min": 2.4563,
+          "max": 2.477,
+          "values": [
+            2.4563,
+            2.4691,
+            2.477
+          ]
+        },
+        "method_best": {
+          "median": 1.8819,
+          "min": 1.8608,
+          "max": 1.8825,
+          "values": [
+            1.8819,
+            1.8608,
+            1.8825
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.9": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4856,
+          "min": 2.4658,
+          "max": 2.4888,
+          "values": [
+            2.4658,
+            2.4856,
+            2.4888
+          ]
+        },
+        "method_best": {
+          "median": 1.8982,
+          "min": 1.8854,
+          "max": 1.9029,
+          "values": [
+            1.8982,
+            1.8854,
+            1.9029
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.8": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4851,
+          "min": 2.4701,
+          "max": 2.4911,
+          "values": [
+            2.4701,
+            2.4851,
+            2.4911
+          ]
+        },
+        "method_best": {
+          "median": 1.9206,
+          "min": 1.918,
+          "max": 1.9218,
+          "values": [
+            1.918,
+            1.9206,
+            1.9218
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.7": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            9.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4923,
+          "min": 2.4831,
+          "max": 2.4959,
+          "values": [
+            2.4831,
+            2.4923,
+            2.4959
+          ]
+        },
+        "method_best": {
+          "median": 1.9117,
+          "min": 1.9074,
+          "max": 1.9175,
+          "values": [
+            1.9175,
+            1.9074,
+            1.9117
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.6": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            9.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4807,
+          "min": 2.4751,
+          "max": 2.4864,
+          "values": [
+            2.4751,
+            2.4864,
+            2.4807
+          ]
+        },
+        "method_best": {
+          "median": 1.9069,
+          "min": 1.9044,
+          "max": 1.9089,
+          "values": [
+            1.9044,
+            1.9089,
+            1.9069
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.5": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            9.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4898,
+          "min": 2.4819,
+          "max": 2.494,
+          "values": [
+            2.4898,
+            2.4819,
+            2.494
+          ]
+        },
+        "method_best": {
+          "median": 1.9116,
+          "min": 1.8896,
+          "max": 1.9173,
+          "values": [
+            1.9116,
+            1.8896,
+            1.9173
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.4": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 9.0,
+          "min": 8.0,
+          "max": 9.0,
+          "values": [
+            8.0,
+            9.0,
+            9.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4812,
+          "min": 2.4799,
+          "max": 2.4838,
+          "values": [
+            2.4838,
+            2.4799,
+            2.4812
+          ]
+        },
+        "method_best": {
+          "median": 1.8999,
+          "min": 1.8993,
+          "max": 1.9006,
+          "values": [
+            1.8999,
+            1.8993,
+            1.9006
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.3": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            9.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4824,
+          "min": 2.4775,
+          "max": 2.49,
+          "values": [
+            2.49,
+            2.4775,
+            2.4824
+          ]
+        },
+        "method_best": {
+          "median": 1.9067,
+          "min": 1.8996,
+          "max": 1.9102,
+          "values": [
+            1.9067,
+            1.8996,
+            1.9102
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.2": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4862,
+          "min": 2.4809,
+          "max": 2.4868,
+          "values": [
+            2.4862,
+            2.4868,
+            2.4809
+          ]
+        },
+        "method_best": {
+          "median": 1.9114,
+          "min": 1.9014,
+          "max": 1.9172,
+          "values": [
+            1.9172,
+            1.9114,
+            1.9014
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.1": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 8.0,
+          "min": 7.0,
+          "max": 10.0,
+          "values": [
+            8.0,
+            7.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4846,
+          "min": 2.4816,
+          "max": 2.4935,
+          "values": [
+            2.4846,
+            2.4935,
+            2.4816
+          ]
+        },
+        "method_best": {
+          "median": 1.9086,
+          "min": 1.9084,
+          "max": 1.9206,
+          "values": [
+            1.9206,
+            1.9084,
+            1.9086
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0.05": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            9.0,
+            10.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4817,
+          "min": 2.4812,
+          "max": 2.4831,
+          "values": [
+            2.4831,
+            2.4812,
+            2.4817
+          ]
+        },
+        "method_best": {
+          "median": 1.9159,
+          "min": 1.8955,
+          "max": 1.9195,
+          "values": [
+            1.9159,
+            1.8955,
+            1.9195
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      },
+      "0": {
+        "n_seeds": 3,
+        "n_reached_baseline": 3,
+        "prism_score": {
+          "median": 10.0,
+          "min": 9.0,
+          "max": 10.0,
+          "values": [
+            10.0,
+            10.0,
+            9.0
+          ]
+        },
+        "any_left_censored": true,
+        "baseline_best": {
+          "median": 2.4812,
+          "min": 2.4771,
+          "max": 2.4845,
+          "values": [
+            2.4771,
+            2.4845,
+            2.4812
+          ]
+        },
+        "method_best": {
+          "median": 1.9034,
+          "min": 1.8982,
+          "max": 1.9187,
+          "values": [
+            1.9034,
+            1.8982,
+            1.9187
+          ]
+        },
+        "method_overfits_any": false,
+        "baseline_overfits_any": false
+      }
+    }
+  }
+}
