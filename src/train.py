@@ -65,6 +65,17 @@ prism_mod_sustain = 0.0 # sustain phase strength (0 = use single-phase mod)
 prism_mod_sustain_decay = 0.9999 # sustain phase decay
 prism_mod_transition = 0 # step to switch from attack to sustain (0 = single phase)
 prism_unfold = 0 # re-extract spectral targets every N steps (0 = fixed targets)
+# prism direction-transfer knobs (opt-in; defaults reproduce the recipe exactly)
+prism_align_spec = '' # per-group alignment, e.g. 'attention:0.9,ffn_down:0.5'
+prism_align_mode = 'linear' # 'linear' | 'grassmann' | 'subspace'
+prism_align_topk = 0 # transfer only the leading k singular directions (0 = all)
+prism_align_depth_gamma = 0.0 # taper align with depth: base*(1-gamma*depth_frac)
+prism_per_layer_spectra = '' # path to spectra_per_layer.json (empty = group avg)
+# prism CKA representational regularizer (opt-in, experimental)
+prism_cka = 0.0 # weight on the (1 - CKA) representational-distance loss (0 = off)
+prism_cka_teacher = '' # path to a teacher ckpt.pt whose block activations to match
+prism_cka_layers = '' # comma block indices to match (empty = all blocks)
+prism_cka_samples = 2048 # max token rows subsampled per layer for the CKA estimate
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -210,7 +221,13 @@ if prism_init and init_from == 'scratch':
     print(f"Applying Prism init (align={prism_align})...")
     apply_prism(model, align_strength=prism_align, lam=1.0,
                 spectra_path=prism_spectra or None,
-                directions_path=prism_directions or None)
+                directions_path=prism_directions or None,
+                align_spec=prism_align_spec or None,
+                align_mode=prism_align_mode,
+                align_topk=prism_align_topk,
+                align_depth_gamma=prism_align_depth_gamma,
+                per_layer_spectra_path=prism_per_layer_spectra or None,
+                n_layer=n_layer)
     print("Prism init complete.")
     # Capture spectral targets for modulation (before compile changes the model)
     if prism_mod > 0:
@@ -219,6 +236,18 @@ if prism_init and init_from == 'scratch':
                          if param.dim() >= 2}
         print(f"[prism] Captured {len(prism_targets)} spectral targets for modulation "
               f"(strength={prism_mod}, decay={prism_mod_decay})")
+
+# Prism CKA representational regularizer (opt-in) — pull student block activations
+# toward a frozen teacher's. Set up before compile so hooks fire on the raw model.
+cka_matcher = None
+if prism_cka > 0 and prism_cka_teacher:
+    from prism_cka import CKAMatcher
+    _cka_layers = [int(x) for x in prism_cka_layers.split(',') if x.strip() != ''] or None
+    cka_matcher = CKAMatcher(prism_cka_teacher, device, layers=_cka_layers,
+                             max_samples=prism_cka_samples)
+    cka_matcher.attach_student(model)
+    print(f"[prism] CKA regularizer on (weight={prism_cka}, "
+          f"teacher={prism_cka_teacher}, blocks={cka_matcher.layers})")
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
@@ -327,6 +356,13 @@ while True:
         with ctx:
             logits, loss = model(X, Y)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
+            # representational transfer: pull student block activations toward the
+            # teacher's on this same batch (linear-CKA distance). Uses the acts the
+            # forward above just captured, so it must run before X is reassigned.
+            if cka_matcher is not None:
+                cka = cka_matcher.loss(X)
+                if cka is not None:
+                    loss = loss + (prism_cka * cka) / gradient_accumulation_steps
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
         X, Y = get_batch('train')
         # backward pass, with gradient scaling if training in fp16
