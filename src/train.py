@@ -29,6 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
+from prism_init import spectral_target as _spectral_target
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -66,6 +67,15 @@ prism_mod_sustain = 0.0 # sustain phase strength (0 = use single-phase mod)
 prism_mod_sustain_decay = 0.9999 # sustain phase decay
 prism_mod_transition = 0 # step to switch from attack to sustain (0 = single phase)
 prism_unfold = 0 # re-extract spectral targets every N steps (0 = fixed targets)
+# prism finetune self-anchor mode (RESUME path only) — what the mod wheel pulls toward:
+#   'raw'      the resumed base weights themselves (soft L2-to-init / EWC-lite)
+#   'spectral' the base's singular-value SPECTRUM imposed on the CURRENT directions,
+#              rebuilt every prism_anchor_refresh steps — holds the spectral shape,
+#              frees U/V to adapt. The attribution test for PRISM's geometry thesis.
+#   'shuffled' same as spectral but with the base spectrum permuted (placebo: same
+#              spectral pressure, wrong spectrum-to-direction assignment)
+prism_anchor_mode = 'raw'
+prism_anchor_refresh = 25 # spectral/shuffled: rebuild the target every N steps
 # prism direction-transfer knobs (opt-in; defaults reproduce the recipe exactly)
 prism_align_spec = '' # per-group alignment, e.g. 'attention:0.9,ffn_down:0.5'
 prism_align_mode = 'linear' # 'linear' | 'grassmann' | 'subspace'
@@ -253,11 +263,29 @@ if prism_init and init_from == 'scratch':
 # prevents catastrophic forgetting during finetuning. Use prism_mod_decay=1.0 for
 # a constant pull (the scratch decay anneals a reshape that isn't happening here).
 elif prism_mod > 0 and init_from == 'resume':
-    prism_targets = {name: param.data.clone().cpu()
-                     for name, param in model.named_parameters()
-                     if param.dim() >= 2}
-    print(f"[prism] Self-anchored {len(prism_targets)} spectral targets from resumed "
-          f"ckpt (strength={prism_mod}, decay={prism_mod_decay})")
+    if prism_anchor_mode == 'raw':
+        prism_targets = {name: param.data.clone().cpu()
+                         for name, param in model.named_parameters()
+                         if param.dim() >= 2}
+    else:
+        # spectral / shuffled: store the base spectrum per weight; the initial target
+        # imposes it on the base's OWN directions (== base weight for 'spectral'; a
+        # permuted-spectrum placebo for 'shuffled'). Refreshed during training below.
+        prism_base_sv = {}
+        prism_targets = {}
+        _g = torch.Generator().manual_seed(seed)
+        for name, param in model.named_parameters():
+            if param.dim() < 2:
+                continue
+            U, s, Vt = torch.linalg.svd(param.data.float(), full_matrices=False)
+            sv0 = s.clone()
+            if prism_anchor_mode == 'shuffled':
+                sv0 = sv0[torch.randperm(sv0.shape[0], generator=_g)]
+            prism_base_sv[name] = sv0.cpu()
+            prism_targets[name] = ((U * sv0) @ Vt).to(param.dtype).cpu()
+    print(f"[prism] Self-anchored {len(prism_targets)} targets from resumed ckpt "
+          f"(mode={prism_anchor_mode}, strength={prism_mod}, decay={prism_mod_decay}"
+          + (f", refresh={prism_anchor_refresh}" if prism_anchor_mode != 'raw' else '') + ')')
 
 # Prism CKA representational regularizer (opt-in) — pull student block activations
 # toward a frozen teacher's. Set up before compile so hooks fire on the raw model.
@@ -428,6 +456,19 @@ while True:
                              if param.dim() >= 2}
         if master_process:
             print(f"[prism] Unfolded: re-extracted {len(prism_targets)} spectral targets at step {iter_num}")
+
+    # spectral-anchor refresh — rebuild each target as (current directions × base
+    # spectrum), so the finetune's U/V stay free while the spectral shape is held to
+    # the base's. This is what makes 'spectral' differ from the 'raw' fixed-weight pull.
+    if (prism_anchor_mode in ('spectral', 'shuffled') and 'prism_base_sv' in dir()
+            and prism_anchor_refresh > 0 and iter_num > 0
+            and iter_num % prism_anchor_refresh == 0):
+        raw_model = model.module if ddp else model
+        with torch.no_grad():
+            for name, param in raw_model.named_parameters():
+                if name in prism_base_sv:
+                    prism_targets[name] = _spectral_target(
+                        param.data, prism_base_sv[name].to(param.device)).cpu()
 
     # timing and logging
     t1 = time.time()

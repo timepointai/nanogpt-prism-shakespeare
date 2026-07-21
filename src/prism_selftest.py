@@ -13,7 +13,8 @@ every new mode runs end-to-end on a tiny GPT. No training, no dataset, seconds.
 import torch
 
 from prism_init import (blend_orthogonal, grassmann_interp, subspace_alignment,
-                        align_directions, apply_prism, _parse_align_spec)
+                        align_directions, apply_prism, _parse_align_spec,
+                        spectral_target)
 from prism_cka import linear_cka
 from model import GPTConfig, GPT
 
@@ -146,6 +147,21 @@ with torch.no_grad():
 after = (p0.data - anchors[name0]).norm().item()
 check('one mod step reduces distance to anchor', after < before)
 check('reduction is exactly (1-mod) of the gap', abs(after - (1 - mod) * before) < 1e-4 * before)
+
+# ── spectral-anchor target (the Round 2 attribution mechanism) ──
+# 'spectral' mode rebuilds its mod-wheel target as U diag(sv0) Vt from the CURRENT
+# weight: the imposed spectrum sv0, the input's own directions. Verify both.
+print('spectral_target (impose a spectrum, keep the directions):')
+Wt = torch.randn(48, 32)
+sv0 = torch.linspace(2.0, 0.1, 32)                 # a target spectrum, descending
+T = spectral_target(Wt, sv0)
+check('target has the imposed spectrum',
+      torch.allclose(torch.linalg.svdvals(T.float()), sv0, atol=1e-4))
+Uw = torch.linalg.svd(Wt.float(), full_matrices=False)[0]
+Ut = torch.linalg.svd(T.float(), full_matrices=False)[0]
+check('target keeps the input column space', subspace_alignment(Uw, Ut) > 0.999)
+Tsh = spectral_target(Wt, sv0[torch.randperm(32)])  # shuffled spectrum
+check('shuffled spectrum → a different target', not torch.allclose(T, Tsh, atol=1e-3))
 
 print(f'\n{len(PASS)} passed, {len(FAIL)} failed')
 if FAIL:

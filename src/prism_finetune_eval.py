@@ -59,6 +59,25 @@ SHAKE = 'data/shakespeare_char'      # OLD domain (retention). base trains here.
 FT = 'data/sherlock_ft'              # NEW domain (adaptation). built from far_corpus.
 CONFIG = 'config/train_shakespeare_char.py'
 
+# The arms. Resume arms finetune a fork of the base; scratch_ceiling trains fresh.
+# Round 1 used plain + selfanchor + scratch_ceiling. Round 2 adds the attribution
+# ladder: a raw-anchor strength sweep, a low-LR frontier (the "mod wheel is just a
+# smaller LR" null), the spectral anchor (hold base spectrum, free directions), and
+# a shuffled-spectrum placebo — all at matched schedule so a win is attributable.
+ARM_SPECS = {
+    'plain':           dict(resume=True,  mod=0.0),                                   # control
+    'selfanchor':      dict(resume=True,  mod=0.01,  mode='raw'),                     # R1 technique (== raw_mid)
+    'raw_lo':          dict(resume=True,  mod=0.005, mode='raw'),
+    'raw_mid':         dict(resume=True,  mod=0.01,  mode='raw'),
+    'raw_hi':          dict(resume=True,  mod=0.02,  mode='raw'),
+    'lowlr_a':         dict(resume=True,  mod=0.0,   lr='1.5e-4'),
+    'lowlr_b':         dict(resume=True,  mod=0.0,   lr='1e-4'),
+    'lowlr_c':         dict(resume=True,  mod=0.0,   lr='5e-5'),
+    'spectral':        dict(resume=True,  mod=0.01,  mode='spectral', refresh=25),    # the PRISM claim
+    'shuffled':        dict(resume=True,  mod=0.01,  mode='shuffled', refresh=25),    # placebo
+    'scratch_ceiling': dict(resume=False),                                           # adapt ceiling
+}
+
 
 def parse_retain(stdout):
     """Extract {step: val2_loss} (old-domain / retention loss) from the eval lines."""
@@ -162,7 +181,8 @@ def run_arm(arm, seed, base_ckpt, a, device, run_dir):
             f'(adapt best {r["adapt_best"]:.4f}).', 2)
         return r
 
-    resume = arm != 'scratch_ceiling'
+    spec = ARM_SPECS[arm]
+    resume = spec['resume']
     last_step = (a.base_steps + a.ft_steps) if resume else a.ft_steps
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out, exist_ok=True)
@@ -174,18 +194,17 @@ def run_arm(arm, seed, base_ckpt, a, device, run_dir):
 
     if resume:
         shutil.copy(base_ckpt, f'{out}/ckpt.pt')          # fork the base
+        lr = spec.get('lr', a.learning_rate)
         cmd += ['--init_from=resume', f'--val2_dir={SHAKE}',
                 f'--max_iters={a.base_steps + a.ft_steps}',
                 f'--warmup_iters={a.base_steps + a.ft_warmup}',
                 f'--lr_decay_iters={a.base_steps + a.ft_steps}',
-                f'--learning_rate={a.learning_rate}', f'--min_lr={a.min_lr}',
-                '--decay_lr=True']
-        if arm == 'plain':
-            pass                    # the control: mod wheel OFF (prism_mod defaults to 0.0)
-        elif arm == 'selfanchor':
-            cmd += ['--prism_mod=0.01', '--prism_mod_decay=1.0']   # the technique
-        else:
-            raise ValueError(f'unknown resume arm {arm}')
+                f'--learning_rate={lr}', f'--min_lr={a.min_lr}', '--decay_lr=True']
+        if spec.get('mod', 0.0) > 0:   # engage the mod wheel (constant pull during ft)
+            cmd += [f'--prism_mod={spec["mod"]}', '--prism_mod_decay=1.0',
+                    f'--prism_anchor_mode={spec.get("mode", "raw")}']
+            if spec.get('refresh'):
+                cmd.append(f'--prism_anchor_refresh={spec["refresh"]}')
     else:   # scratch_ceiling: best NEW-domain loss reachable fresh in ft_steps
         cmd += ['--init_from=scratch', '--prism_init=False',
                 f'--max_iters={a.ft_steps}', f'--warmup_iters={a.ft_warmup}',
@@ -225,32 +244,41 @@ def run_arm(arm, seed, base_ckpt, a, device, run_dir):
 
 
 def score_seed(arms):
-    """Per-seed forgetting/adaptation metrics. Needs plain + selfanchor; ceiling
-    optional."""
-    plain, mod = arms['plain'], arms['selfanchor']
-    ceil = arms.get('scratch_ceiling')
-    rb = plain['retain_at_base']
-    forget_plain = plain['retain_at_end'] - rb
-    forget_mod = mod['retain_at_end'] - rb
-    ratio = (forget_plain / forget_mod) if abs(forget_mod) > 1e-6 else None
-    m = {
-        'retention_at_base': rb,
-        'retention_at_base_selfanchor': mod['retain_at_base'],   # sanity: ≈ rb
-        'forgetting_plain': round(forget_plain, 4),
-        'forgetting_mod': round(forget_mod, 4),
-        'forgetting_ratio': round(ratio, 3) if ratio is not None else None,
-        'retention_gap': round(forget_plain - forget_mod, 4),
-        'adapt_best_plain': plain['adapt_best'],
-        'adapt_best_mod': mod['adapt_best'],
-        'adaptation_cost': round(mod['adapt_best'] / plain['adapt_best'], 4),
-        'overfit_averted': bool(plain['adapt_overfits'] and not mod['adapt_overfits']),
-        # guards
-        'retention_floored': forget_plain <= 0.05,
-        'adaptation_censored': mod['adapt_best'] > 1.10 * plain['adapt_best'],
-    }
-    if ceil:
-        m['adapt_best_ceiling'] = ceil['adapt_best']
-        m['adapt_gap_to_ceiling_mod'] = round(mod['adapt_best'] - ceil['adapt_best'], 4)
+    """Per-seed forgetting/adaptation metrics for ANY set of resume arms. forgetting
+    = old-domain (Shakespeare) val climb from the shared base; adapt = new-domain
+    (Sherlock) best. Each anchor arm is compared to the plain control as a ratio.
+    Keeps the Round-1 headline (plain vs the raw-0.01 anchor) when both are present."""
+    resume = {k: v for k, v in arms.items() if 'retain_at_end' in v}
+    if not resume:
+        return None
+    rb = next(iter(resume.values()))['retain_at_base']     # identical across arms (same fork)
+    plain = resume.get('plain')
+    per_arm = {}
+    for k, v in resume.items():
+        f = round(v['retain_at_end'] - rb, 4)
+        rec = {'forgetting': f, 'adapt_best': v['adapt_best'],
+               'adapt_at_end': v['adapt_at_end'], 'adapt_overfits': v['adapt_overfits']}
+        if plain:
+            pf = plain['retain_at_end'] - rb
+            rec['forgetting_ratio_vs_plain'] = round(pf / f, 3) if abs(f) > 1e-6 else None
+            rec['adaptation_cost_vs_plain'] = round(v['adapt_best'] / plain['adapt_best'], 4)
+        per_arm[k] = rec
+    m = {'retention_at_base': rb, 'arms': per_arm}
+    if 'scratch_ceiling' in arms:
+        m['adapt_best_ceiling'] = arms['scratch_ceiling']['adapt_best']
+    # headline: plain vs the canonical raw-0.01 anchor (selfanchor or raw_mid)
+    anchor = 'selfanchor' if 'selfanchor' in per_arm else \
+             ('raw_mid' if 'raw_mid' in per_arm else None)
+    if plain and anchor:
+        fp, fm = per_arm['plain']['forgetting'], per_arm[anchor]['forgetting']
+        m['forgetting_plain'] = fp
+        m['forgetting_mod'] = fm
+        m['forgetting_ratio'] = round(fp / fm, 3) if abs(fm) > 1e-6 else None
+        m['adaptation_cost'] = per_arm[anchor]['adaptation_cost_vs_plain']
+        m['overfit_averted'] = bool(per_arm['plain']['adapt_overfits']
+                                    and not per_arm[anchor]['adapt_overfits'])
+        m['retention_floored'] = fp <= 0.05
+        m['adaptation_censored'] = per_arm[anchor]['adapt_best'] > 1.10 * per_arm['plain']['adapt_best']
     return m
 
 
@@ -273,7 +301,8 @@ def main():
     p.add_argument('--eval_iters', type=int, default=200)
     p.add_argument('--seeds', default='1337,1338,1339')
     p.add_argument('--arms', default='base,plain,selfanchor,scratch_ceiling',
-                   help='comma list from base,plain,selfanchor,scratch_ceiling')
+                   help='comma list; base + any of ' + ', '.join(ARM_SPECS)
+                        + ' (Round 2 ladder: raw_lo/mid/hi, lowlr_a/b/c, spectral, shuffled)')
     p.add_argument('--learning_rate', default='3e-4', help='finetune LR (resume arms)')
     p.add_argument('--min_lr', default='3e-5')
     p.add_argument('--ceiling_lr', default='1e-3', help='LR for the scratch ceiling arm')
@@ -286,6 +315,9 @@ def main():
     a = p.parse_args()
     a.seeds = [int(s) for s in a.seeds.split(',') if s.strip()]
     arms = [x for x in a.arms.split(',') if x.strip()]
+    bad = [x for x in arms if x != 'base' and x not in ARM_SPECS]
+    if bad:
+        sys.exit(f'unknown arm(s): {bad}. known: base, ' + ', '.join(ARM_SPECS))
     device = a.device or default_device()
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -323,9 +355,10 @@ def main():
             for arm in [x for x in arms if x != 'base']:
                 arm_results[arm] = run_arm(arm, seed, base['ckpt'], a, device, run_dir)
             entry = {'seed': seed, 'base': base, 'arms': arm_results}
-            if 'plain' in arm_results and 'selfanchor' in arm_results:
-                entry['metrics'] = score_seed(arm_results)
-                per_seed_metrics.append(entry['metrics'])
+            m = score_seed(arm_results)
+            if m:
+                entry['metrics'] = m
+                per_seed_metrics.append(m)
             per_seed.append(entry)
             _persist(stamp, key, a, dist, device, arms, per_seed, per_seed_metrics,
                      complete=False)
@@ -342,27 +375,41 @@ def main():
             pass
 
 
-def _agg(metrics, kk):
-    vals = [m[kk] for m in metrics if m.get(kk) is not None]
+def _agg(vals):
+    vals = [v for v in vals if v is not None]
     return _stats(vals) if vals else None
 
 
 def _persist(stamp, key, a, dist, device, arms, per_seed, metrics, complete):
     summary = None
     if metrics:
+        arm_names = sorted({name for m in metrics for name in m.get('arms', {})})
+        arm_summ = {}
+        for name in arm_names:
+            got = [m['arms'][name] for m in metrics if name in m['arms']]
+            arm_summ[name] = {
+                'forgetting': _agg([g['forgetting'] for g in got]),
+                'adapt_best': _agg([g['adapt_best'] for g in got]),
+                'forgetting_ratio_vs_plain': _agg([g.get('forgetting_ratio_vs_plain') for g in got]),
+                'adaptation_cost_vs_plain': _agg([g.get('adaptation_cost_vs_plain') for g in got]),
+                'overfits_any': any(g['adapt_overfits'] for g in got),
+            }
         summary = {
             'n_seeds': len(metrics),
-            'forgetting_plain': _agg(metrics, 'forgetting_plain'),
-            'forgetting_mod': _agg(metrics, 'forgetting_mod'),
-            'forgetting_ratio': _agg(metrics, 'forgetting_ratio'),
-            'retention_gap': _agg(metrics, 'retention_gap'),
-            'adaptation_cost': _agg(metrics, 'adaptation_cost'),
-            'adapt_best_plain': _agg(metrics, 'adapt_best_plain'),
-            'adapt_best_mod': _agg(metrics, 'adapt_best_mod'),
-            'overfit_averted_all': all(m['overfit_averted'] for m in metrics),
-            'retention_floored_any': any(m['retention_floored'] for m in metrics),
-            'adaptation_censored_any': any(m['adaptation_censored'] for m in metrics),
+            'retention_at_base': _agg([m['retention_at_base'] for m in metrics]),
+            'adapt_best_ceiling': _agg([m.get('adapt_best_ceiling') for m in metrics]),
+            'arms': arm_summ,
         }
+        if any('forgetting_ratio' in m for m in metrics):   # headline pair present
+            summary.update({
+                'forgetting_plain': _agg([m.get('forgetting_plain') for m in metrics]),
+                'forgetting_mod': _agg([m.get('forgetting_mod') for m in metrics]),
+                'forgetting_ratio': _agg([m.get('forgetting_ratio') for m in metrics]),
+                'adaptation_cost': _agg([m.get('adaptation_cost') for m in metrics]),
+                'overfit_averted_all': all(m.get('overfit_averted') for m in metrics),
+                'retention_floored_any': any(m.get('retention_floored') for m in metrics),
+                'adaptation_censored_any': any(m.get('adaptation_censored') for m in metrics),
+            })
     art = {
         'schema': 'prism-finetune/1',
         'partial': not complete,
@@ -376,13 +423,16 @@ def _persist(stamp, key, a, dist, device, arms, per_seed, metrics, complete):
             'learning_rate': a.learning_rate, 'min_lr': a.min_lr,
             'ceiling_lr': a.ceiling_lr, 'batch_size': a.batch_size,
             'block_size': a.block_size, 'device': device,
-            'prism_mod': 0.01, 'prism_mod_decay': 1.0,
+            'prism_mod_decay': 1.0,
             'prism_mod_decay_note': 'constant pull during finetune (decay=1.0): the '
                 'canonical 0.9999 anneals a from-scratch reshape, which is not '
                 'happening on resume; a constant pull removes the resume-iter clock.',
-            'schedule_matched': True,   # plain vs selfanchor differ only in prism_mod
-            'schedule_matched_note': 'plain (prism_mod=0) and selfanchor (prism_mod=0.01) '
-                'share LR/warmup/steps/data — the ONLY difference is the mod wheel.',
+            'arm_specs': {k: ARM_SPECS[k] for k in arms if k in ARM_SPECS},
+            'schedule_matched': True,
+            'schedule_matched_note': 'the plain control and every anchor arm share '
+                'LR/warmup/steps/data and differ ONLY in the mod wheel (prism_mod / '
+                'anchor_mode) — EXCEPT the lowlr_* frontier, which varies LR on '
+                'purpose as the "mod wheel is just a smaller LR" null.',
             'distances': dist,
         },
         'runs': per_seed,
@@ -397,38 +447,48 @@ def _persist(stamp, key, a, dist, device, arms, per_seed, metrics, complete):
 def _report(a):
     s, c = a['summary'], a['config']
     print()
-    print('  ' + '-' * 66)
+    print('  ' + '-' * 74)
     print(f'    PRISM FINETUNE-RETENTION — {c["far_corpus"]}  '
           f'(base {c["base_steps"]} → ft {c["ft_steps"]})')
-    print('  ' + '-' * 66)
+    print('  ' + '-' * 74)
     if not s:
-        print('    (no plain+selfanchor pair scored)')
-        print('  ' + '-' * 66)
+        print('    (no resume arm scored)')
+        print('  ' + '-' * 74)
         return
     d = c['distances']
-    print(f'    Seeds {c["seeds"]} · token-JS new-vs-old {d["token_js_new_vs_old_train"]:.4f}')
-    for m in a['per_seed_metrics']:
-        print(f'    forget plain {m["forgetting_plain"]:+.3f} · mod {m["forgetting_mod"]:+.3f}'
-              f'  ratio {m["forgetting_ratio"]}  ·  adapt cost {m["adaptation_cost"]:.3f}'
-              f'  overfit_averted {m["overfit_averted"]}')
-    print('  ' + '-' * 66)
-    fr = s['forgetting_ratio']
-    print(f'    FORGETTING (old-domain val climb): plain median '
-          f'{s["forgetting_plain"]["median"]:+.3f}  vs  mod {s["forgetting_mod"]["median"]:+.3f}')
-    print(f'    FORGETTING RATIO (plain/mod): '
-          f'{("median %.2fx  range %.2f-%.2f" % (fr["median"], fr["min"], fr["max"])) if fr else "N/A"}')
-    print(f'    ADAPTATION cost (mod/plain new-domain best): '
-          f'{s["adaptation_cost"]["median"]:.3f}  (≈1.0 = wheel did not freeze)')
-    print(f'    overfit averted (all seeds): {s["overfit_averted_all"]}')
-    print('  ' + '-' * 66)
-    if s['retention_floored_any']:
-        print('    ⚠ retention_floored: plain barely forgot (≤0.05) — domain too')
-        print('      close, comparison VOID. Swap to a genuinely far corpus.')
-    if s['adaptation_censored_any']:
-        print('    ⚠ adaptation_censored: mod arm froze (new-domain best >1.10× plain)')
-        print('      — retention was bought by not learning. A failure, not a win.')
-    print('    forgetting_ratio > ~2 with adaptation_cost ≈ 1.0 = the wheel lets you')
-    print('    finetune without losing the advantage. Ratio ≈ 1 = clean negative.')
+    print(f'    Seeds {c["seeds"]} · token-JS new-vs-old {d["token_js_new_vs_old_train"]:.4f}'
+          f' · retention_at_base {s["retention_at_base"]["median"]:.3f}'
+          + (f' · scratch ceiling {s["adapt_best_ceiling"]["median"]:.3f}'
+             if s.get('adapt_best_ceiling') else ''))
+    print('  ' + '-' * 74)
+    print(f'    {"arm":16} | {"forget↓":>8} | {"adapt↓":>7} | {"less-forget/plain":>17} | overfit')
+    print('  ' + '-' * 74)
+    # order: plain first, then anchors by forgetting (best retention first)
+    items = sorted(s['arms'].items(),
+                   key=lambda kv: (kv[0] != 'plain',
+                                   kv[1]['forgetting']['median'] if kv[1]['forgetting'] else 9))
+    for name, g in items:
+        fo = g['forgetting']['median'] if g['forgetting'] else float('nan')
+        ab = g['adapt_best']['median'] if g['adapt_best'] else float('nan')
+        rr = g['forgetting_ratio_vs_plain']
+        rr_s = f'{rr["median"]:.2f}x' if rr and rr['median'] is not None else '—'
+        print(f'    {name:16} | {fo:>+8.3f} | {ab:>7.3f} | {rr_s:>17} | '
+              f'{"Y" if g["overfits_any"] else "n"}')
+    print('  ' + '-' * 74)
+    print('    forget↓ = old-domain (Shakespeare) val climb from base (lower=better).')
+    print('    adapt↓  = new-domain (Sherlock) best val (lower=better; beat the ceiling).')
+    if 'forgetting_ratio' in s and s['forgetting_ratio']:
+        fr = s['forgetting_ratio']
+        print(f'    HEADLINE forgetting_ratio (plain/anchor): median {fr["median"]:.2f}x '
+              f'range {fr["min"]:.2f}-{fr["max"]:.2f}  ·  adaptation_cost '
+              f'{s["adaptation_cost"]["median"]:.3f}')
+        if s.get('retention_floored_any'):
+            print('    ⚠ retention_floored: plain barely forgot (≤0.05) — domain too close, VOID.')
+        if s.get('adaptation_censored_any'):
+            print('    ⚠ adaptation_censored: anchor froze (new-domain best >1.10× plain).')
+    print('    ATTRIBUTION (Round 2): spectral must retain like raw AND adapt better,')
+    print('    Pareto-dominating the raw_* and lowlr_* frontiers + beating shuffled,')
+    print('    to earn "spectral"; else it is a generic proximal anchor.')
     print()
 
 
