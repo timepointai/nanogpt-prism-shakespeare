@@ -17,6 +17,7 @@ reproducible from an artifact in [`results/`](results/). Earlier writeups:
 | F | **Teacher-strength sweep**: teachers 100→2,000 steps, 300-step students | [`recipe_20260721T143246Z.json`](results/recipe_20260721T143246Z.json) |
 | G | **Lever eval — grassmann alignment alone** (single variable vs. Run E's plain control) | [`recipe_20260721T162552Z.json`](results/recipe_20260721T162552Z.json) |
 | H | **Lever eval — top-k=128 alone** (single variable vs. Run E's plain control) | [`recipe_20260721T164007Z.json`](results/recipe_20260721T164007Z.json) |
+| I | **Teacher saturation**: teachers 2,000 / 4,000 / 8,000 — finds the plateau | [`recipe_20260721T172238Z.json`](results/recipe_20260721T172238Z.json) |
 | — | Sliding-window overlap sweep — **record only, interpretation retired** (difficulty confound; superseded by D) | [`recipe_20260721T022342Z.json`](results/recipe_20260721T022342Z.json) |
 | — | Far-corpus sweep scored on Shakespeare val — superseded by E (see scope note in [`results/README.md`](results/README.md)) | [`recipe_20260721T153218Z.json`](results/recipe_20260721T153218Z.json) |
 
@@ -112,7 +113,18 @@ Same-data probe, 300-step students, one teacher size per arm:
 | 1,000 | 2.180 | 1.804 | 0.377 | 7.5× |
 | 2,000 | 2.180 | 1.729 | 0.451 | 7.5× |
 
-**Monotonic and unsaturated at 2,000 teacher steps.** And the sharp edge: a
+And the saturation run (Run I, teachers 2,000 / 4,000 / 8,000, same rig):
+
+| teacher steps | Δloss |
+|---|---|
+| 2,000 | +0.458 (anchor — reproduces Run F's +0.451) |
+| 4,000 | +0.465 |
+| 8,000 | +0.456 |
+
+**Monotonic to ≈2,000 teacher steps, then a plateau at Δloss ≈ +0.46** — the
+lever saturates right where the teacher itself converges (its best is ~step
+1,350). The advantage tracks teacher-geometry convergence: once the geometry has
+converged, more teacher training adds nothing. And the sharp edge: a
 barely-trained teacher is *actively worse than random init* — its geometry is
 noise being imprinted with authority. If you use `prism_accelerate.py`, use a
 trained teacher.

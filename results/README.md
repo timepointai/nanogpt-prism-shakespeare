@@ -22,8 +22,12 @@ Eval artifacts. **This directory is the evidence.** Committed runs:
   `left_censored: false`. Crossover ~step 100 vs. baseline best ~step 1,020–1,400.
 - `recipe_20260721T143246Z.json` — **teacher-strength sweep** (100→2,000 teacher
   steps, 300-step students): advantage is monotonic in teacher strength and
-  unsaturated at 2,000; a 100-step teacher is *actively worse than random init*
-  (method 2.249 vs. baseline 2.180).
+  saturating at ≈2,000 (see the saturation run below); a 100-step teacher is
+  *actively worse than random init* (method 2.249 vs. baseline 2.180).
+- `recipe_20260721T172238Z.json` — **teacher saturation** (2k/4k/8k): Δloss
+  +0.458 / +0.465 / +0.456 — a plateau at ≈+0.46 from 2,000 steps on, right
+  where the teacher itself converges. The 2k anchor reproduces the sweep's
+  +0.451.
 - `recipe_20260721T153218Z.json` — far-corpus sweep (student's fresh blocks from
   Sherlock Holmes, token-JS up to 0.027): Δloss flat across distance. **Scope
   caveat:** the student is scored on the *Shakespeare* val set in this protocol,

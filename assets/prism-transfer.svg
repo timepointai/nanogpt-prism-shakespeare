@@ -88,28 +88,31 @@
   <!-- x labels (log spacing) -->
   <g font-size="10.5" fill="#9a9aa4" text-anchor="middle">
     <text x="590" y="356">100</text>
-    <text x="685" y="356">250</text>
-    <text x="757" y="356">500</text>
-    <text x="828" y="356">1,000</text>
-    <text x="900" y="356">2,000</text>
+    <text x="655" y="356">250</text>
+    <text x="704" y="356">500</text>
+    <text x="753" y="356">1k</text>
+    <text x="802" y="356">2k</text>
+    <text x="851" y="356">4k</text>
+    <text x="900" y="356">8k</text>
   </g>
   <text x="745" y="376" text-anchor="middle" font-size="10.5" fill="#9a9aa4">teacher training steps (log scale)</text>
 
   <!-- curve -->
-  <polyline points="590,315.5 685,242.3 757,167.6 828,107.4 900,72.9"
+  <polyline points="590,315.5 655,242.3 704,167.6 753,107.4 802,69.6 851,66.3 900,70.5"
             fill="none" stroke="#0d9488" stroke-width="2.5"/>
   <g fill="#0d9488">
-    <circle cx="685" cy="242.3" r="3.5"/><circle cx="757" cy="167.6" r="3.5"/>
-    <circle cx="828" cy="107.4" r="3.5"/><circle cx="900" cy="72.9" r="3.5"/>
+    <circle cx="655" cy="242.3" r="3.5"/><circle cx="704" cy="167.6" r="3.5"/>
+    <circle cx="753" cy="107.4" r="3.5"/><circle cx="802" cy="69.6" r="3.5"/>
+    <circle cx="851" cy="66.3" r="3.5"/><circle cx="900" cy="70.5" r="3.5"/>
   </g>
   <circle cx="590" cy="315.5" r="3.5" fill="#db2777"/>
 
   <g font-size="10.5" fill="#8b8b96">
     <text x="600" y="330" fill="#db2777" font-weight="600">a weak teacher hurts (−0.069)</text>
-    <text x="893" y="57" text-anchor="end" font-weight="600">+0.451 and still climbing —</text>
-    <text x="893" y="70" text-anchor="end" font-weight="600">unsaturated at 2,000</text>
+    <text x="575" y="92" font-weight="600">saturates ≈2k — plateau +0.46,</text>
+    <text x="575" y="106" font-weight="600">where the teacher itself converges</text>
   </g>
   <text x="745" y="408" text-anchor="middle" font-size="10.5" fill="#9a9aa4">Δloss = baseline best − recipe best at step 300 · 3 seeds · medians</text>
 
-  <text x="480" y="426" text-anchor="middle" font-size="9.5" fill="#9a9aa4">nanoGPT Shakespeare char, 10.65M params · matched LR (left) · committed artifacts: recipe_20260721T161208Z.json, recipe_20260721T143246Z.json</text>
+  <text x="480" y="426" text-anchor="middle" font-size="9.5" fill="#9a9aa4">nanoGPT Shakespeare char, 10.65M params · matched LR (left) · artifacts: recipe_20260721T161208Z, …T143246Z, …T172238Z</text>
 </svg>

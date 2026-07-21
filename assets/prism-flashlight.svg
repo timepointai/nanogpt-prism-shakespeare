@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" font-family="ui-monospace,Menlo,Consolas,monospace">
+  <!-- README hero: the prism metaphor, compact. Full explainer: docs/how-prism-works.html -->
+  <rect width="960" height="300" rx="12" fill="#06090f"/>
+  <defs>
+    <linearGradient id="w1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eef3fb" stop-opacity=".85"/><stop offset="1" stop-color="#eef3fb" stop-opacity=".25"/>
+    </linearGradient>
+    <linearGradient id="w2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eef3fb" stop-opacity=".2"/><stop offset="1" stop-color="#eef3fb" stop-opacity=".8"/>
+    </linearGradient>
+    <linearGradient id="o1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffb454" stop-opacity=".9"/><stop offset="1" stop-color="#ffb454" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="t1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity=".9"/><stop offset="1" stop-color="#2dd4bf" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="v1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity=".9"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f472b6" stop-opacity=".9"/><stop offset="1" stop-color="#f472b6" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="o2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffb454" stop-opacity=".12"/><stop offset="1" stop-color="#ffb454" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="t2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity=".12"/><stop offset="1" stop-color="#2dd4bf" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="v2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity=".12"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f472b6" stop-opacity=".12"/><stop offset="1" stop-color="#f472b6" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+
+  <text x="480" y="40" text-anchor="middle" fill="#eef3fb" font-size="15" letter-spacing="4">A SPECTROGRAPHIC FLASHLIGHT FOR MODELS</text>
+
+  <!-- teacher chip -->
+  <rect x="30" y="118" width="112" height="72" rx="9" fill="#0e1524" stroke="#28324a"/>
+  <text x="86" y="148" text-anchor="middle" fill="#eef3fb" font-size="11">TRAINED</text>
+  <text x="86" y="164" text-anchor="middle" fill="#eef3fb" font-size="11">CHECKPOINT</text>
+  <text x="86" y="180" text-anchor="middle" fill="#7d8aa0" font-size="9">W = UΣVᵀ</text>
+
+  <!-- beam in -->
+  <polygon points="142,146 268,141 268,167 142,162" fill="url(#w1)"/>
+
+  <!-- prism read -->
+  <polygon points="268,96 336,218 200,218" fill="#0e1524" fill-opacity=".7" stroke="#eef3fb" stroke-opacity=".55" stroke-width="1.3"/>
+  <text x="268" y="205" text-anchor="middle" fill="#ffb454" font-size="11" letter-spacing="2.5">PRISM</text>
+
+  <!-- fan -->
+  <polygon points="306,148 500,84  500,100 306,155" fill="url(#o1)"/>
+  <polygon points="306,153 500,132 500,148 306,160" fill="url(#t1)"/>
+  <polygon points="306,158 500,180 500,196 306,165" fill="url(#v1)"/>
+  <polygon points="306,163 500,228 500,244 306,170" fill="url(#p1)"/>
+  <text x="480" y="76" text-anchor="middle" fill="#7d8aa0" font-size="9.5">spectrum (energy) + directions (axes), per weight group</text>
+
+  <!-- fan converge -->
+  <polygon points="654,148 500,100 500,84  654,155" fill="url(#o2)"/>
+  <polygon points="654,153 500,148 500,132 654,160" fill="url(#t2)"/>
+  <polygon points="654,158 500,196 500,180 654,165" fill="url(#v2)"/>
+  <polygon points="654,163 500,244 500,228 654,170" fill="url(#p2)"/>
+
+  <!-- prism write -->
+  <polygon points="692,96 760,218 624,218" fill="#0e1524" fill-opacity=".7" stroke="#eef3fb" stroke-opacity=".55" stroke-width="1.3"/>
+  <text x="692" y="205" text-anchor="middle" fill="#2dd4bf" font-size="11" letter-spacing="2.5">PRISM⁻¹</text>
+
+  <!-- beam out -->
+  <polygon points="718,141 818,146 818,162 718,167" fill="url(#w2)"/>
+
+  <!-- student chip -->
+  <rect x="818" y="118" width="112" height="72" rx="9" fill="#0e1524" stroke="#2dd4bf" stroke-opacity=".6"/>
+  <text x="874" y="148" text-anchor="middle" fill="#eef3fb" font-size="11">FRESH MODEL</text>
+  <text x="874" y="164" text-anchor="middle" fill="#eef3fb" font-size="11">~12× FASTER</text>
+  <text x="874" y="180" text-anchor="middle" fill="#7d8aa0" font-size="9">its own content</text>
+
+  <!-- band labels -->
+  <text x="508" y="94"  fill="#ffb454" font-size="9">attention</text>
+  <text x="508" y="142" fill="#2dd4bf" font-size="9">ffn up</text>
+  <text x="508" y="190" fill="#a78bfa" font-size="9">ffn down</text>
+  <text x="508" y="238" fill="#f472b6" font-size="9">embedding</text>
+
+  <text x="86"  y="252" text-anchor="middle" fill="#7d8aa0" font-size="9.5" letter-spacing="2">READ</text>
+  <text x="480" y="270" text-anchor="middle" fill="#535f74" font-size="9.5">geometry crosses · content never does</text>
+  <text x="874" y="252" text-anchor="middle" fill="#7d8aa0" font-size="9.5" letter-spacing="2">WRITE</text>
+</svg>

@@ -3,6 +3,10 @@
 **v0.2** — the transfer results. ([v0.1 archived here](archive/v0.1/) — the
 attribution pass; [v0.0 here](archive/v0.0/) — before the confound was ruled out.)
 
+<img src="assets/prism-flashlight.svg" alt="A spectrographic flashlight for models: a trained checkpoint's raw weights enter a prism as white light and split into four spectral bands — attention, FFN up, FFN down, embedding — each carrying a spectrum and directions. A reversed prism recombines the bands into a fresh model that trains about 12 times faster. Geometry crosses; content never does." width="100%">
+
+<a href="https://raw.githack.com/timepointai/nanogpt-prism-shakespeare/master/docs/how-prism-works.html"><img src="assets/prism-explainer-button.svg" alt="HOW PRISM WORKS — THE VISUAL EXPLAINER: the flashlight metaphor, node-level math, graph-level transfer, and the measurements" width="100%"></a>
+
 ---
 
 **Hand a fresh model nothing but the *spectral geometry* of a trained one — no
@@ -13,10 +17,11 @@ median, three seeds, a resolved measurement — not a bound). The head start doe
 depend on the student seeing the teacher's data: it is identical whether the two
 share 100% or 0% of their training text, and it holds — slightly *grows* — when the
 student trains and is evaluated on a different author entirely (Shakespeare teacher
-→ Sherlock Holmes student). And it scales with the teacher: a stronger teacher
-gives a bigger head start, unsaturated at every teacher size tested.
+→ Sherlock Holmes student). And it tracks the teacher's geometry exactly: the
+advantage grows with teacher training and saturates right where the teacher itself
+converges (≈2,000 steps; 4k and 8k teachers add nothing).
 
-<img src="assets/prism-transfer.svg" alt="Left: validation loss at step 100 versus teacher/student data overlap, with the student scored on its own data mixture — the from-scratch baseline sits at ~2.47 while the Prism recipe sits at ~1.88, and the gap grows from 0.591 at full overlap to 0.627 when the student trains and is scored entirely on Sherlock Holmes. Right: the advantage versus teacher training steps — negative at a 100-step teacher, rising monotonically to +0.451 at 2,000 steps, unsaturated." width="100%">
+<img src="assets/prism-transfer.svg" alt="Left: validation loss at step 100 versus teacher/student data overlap, with the student scored on its own data mixture — the from-scratch baseline sits at ~2.47 while the Prism recipe sits at ~1.88, and the gap grows from 0.591 at full overlap to 0.627 when the student trains and is scored entirely on Sherlock Holmes. Right: the advantage versus teacher training steps — negative at a 100-step teacher, rising monotonically and saturating at a +0.46 plateau around 2,000 steps, where the teacher itself converges; 4k and 8k teachers are flat." width="100%">
 
 | The four measurements (all committed under [results/](results/)) | number | artifact |
 |---|---|---|
@@ -25,9 +30,11 @@ gives a bigger head start, unsaturated at every teacher size tested.
 | **Structure, not content** — early advantage vs. data overlap, difficulty-controlled | **flat**: Δloss 0.57–0.59 at overlap 1.0 *and* 0.0 | [`…T050203Z`](results/recipe_20260721T050203Z.json) |
 | **Cross-domain** — student trains *and is scored* on Sherlock Holmes | Δloss **0.591 → 0.627** (grows with distance) | [`…T161208Z`](results/recipe_20260721T161208Z.json) |
 
-Plus the lever: the advantage grows monotonically with teacher training (Δloss
-−0.069 at a 100-step teacher → +0.451 at 2,000, unsaturated —
-[`…T143246Z`](results/recipe_20260721T143246Z.json)), and the recipe **does not
+Plus the lever, now fully mapped: the advantage grows monotonically with teacher
+training (Δloss −0.069 at a 100-step teacher → +0.46 at 2,000) and **saturates at
+≈2,000 steps — right where the teacher itself converges** (4k/8k teachers flat;
+[`…T143246Z`](results/recipe_20260721T143246Z.json),
+[`…T172238Z`](results/recipe_20260721T172238Z.json)). And the recipe **does not
 overfit** through 5,000 steps at either learning rate tested, where the baseline
 collapses from 1.78 to ~2.31 on every seed
 ([`…T002717Z`](results/recipe_20260718T002717Z.json)).
@@ -74,10 +81,49 @@ initialized and regularized by it. Everything after `--` passes through to
 `train.py`. Two things the measurements say you should know:
 
 - **The teacher must be trained.** A weak teacher (100 steps here) is *worse than
-  random init*. The advantage grows with teacher training and had not saturated at
-  any size tested.
+  random init*. The advantage grows with teacher training and saturates once the
+  teacher converges (≈2,000 steps here) — so train the teacher to convergence,
+  and no further.
 - Teacher and student must share the same architecture — the directional transfer
   is dimension-specific. Cross-size transfer is future work.
+
+## Start here (humans and agents)
+
+Everything needed to verify or extend the results, in order:
+
+```bash
+git clone https://github.com/timepointai/nanogpt-prism-shakespeare.git
+cd nanogpt-prism-shakespeare/src
+pip install torch numpy transformers tiktoken datasets
+python prism_selftest.py          # 25 offline invariant tests, CPU, ~1 min — start here
+python prism_eval.py --teacher_steps=10 --student_steps=10 --eval_every=5 \
+  --eval_iters=2 --seeds=1337 --batch_size=4     # tiny end-to-end smoke, CPU, ~1 min
+```
+
+Then pick a real experiment (each ~20 min on any modern GPU; commands under
+[Reproduce it](#reproduce-it)). Ground rules the tooling enforces, worth knowing
+before you run:
+
+1. **Evidence = `results/*.json`.** Every run writes a full artifact (loss curves,
+   provenance, git commit, argv, censoring flags). A claim without a committed
+   artifact is not a result in this repo.
+2. **Reading a score:** `prism_score` is a ratio — always read it against
+   `baseline_best` (a weak baseline inflates it). `left_censored: true` means a
+   floor, not a measurement. `schedule_matched: true` means only the spectral
+   flags differed — the attribution-grade comparison.
+3. **Runs are resumable:** stages bank to `.prism_runs/<run-key>/`; the same
+   command resumes, any changed knob gets a fresh key. You cannot accidentally
+   resume one experiment onto another.
+4. **Probes must keep `warmup ≪ student_steps`** (the probe schedule uses
+   warmup 20 for 100-step runs) — warmup that spans the whole run flattens both
+   arms and voids the comparison.
+5. **One variable at a time.** The lever knobs (`--align_mode`, `--align_topk`,
+   `--cka`, …) fold into the run key; test each against the plain recipe on an
+   otherwise-identical rig, never stacked.
+
+A machine-readable summary of the method and all measurements is embedded at the
+bottom of the [visual explainer](https://raw.githack.com/timepointai/nanogpt-prism-shakespeare/master/docs/how-prism-works.html)
+(also readable as source at [`docs/how-prism-works.html`](docs/how-prism-works.html)).
 
 ## The idea
 
@@ -199,6 +245,7 @@ truly-far modality above, where the plain recipe may finally need the help.
 
 ```
 README.md                  ← you are here (v0.2)
+docs/how-prism-works.html  ← the visual explainer (standalone, self-contained)
 WHITEPAPER.md              ← method + experiments in full
 RESULTS.md                 ← the committed runs and what they do / don't show
 results/                   ← eval artifacts. the evidence.

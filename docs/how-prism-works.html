@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Prism Works — a spectrographic flashlight for models</title>
+<meta name="description" content="Prism extracts the spectral geometry of a trained neural network — its singular-value spectrum and singular directions — and uses it to initialize and regularize a fresh model. Visual explainer: the prism metaphor, the node-level math, the graph-level transfer, and the committed measurements.">
+<style>
+  :root{
+    --bg:#06090f; --panel:#0b101c; --panel2:#0e1524;
+    --line:#1c2333; --line2:#28324a;
+    --txt:#c9d2e0; --dim:#7d8aa0; --bright:#eef3fb;
+    --orange:#ffb454; --teal:#2dd4bf; --violet:#a78bfa; --pink:#f472b6;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --serif:Georgia,"Times New Roman",serif;
+    --sans:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--txt);font-family:var(--sans);
+       font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+  header.top{border-bottom:1px solid var(--line);padding:18px 0}
+  header.top .wrap{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .brand{font-family:var(--mono);font-size:13px;letter-spacing:.35em;color:var(--bright)}
+  .brand b{color:var(--orange);font-weight:600}
+  .crumb{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--dim)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.3em;
+          text-transform:uppercase;color:var(--orange);margin-bottom:14px}
+  .kicker .n{color:var(--dim);margin-right:10px}
+  h1{font-family:var(--serif);font-weight:400;color:var(--bright);
+     font-size:clamp(30px,4.6vw,46px);line-height:1.22;letter-spacing:.01em}
+  h2{font-family:var(--serif);font-weight:400;color:var(--bright);
+     font-size:clamp(23px,3vw,30px);line-height:1.3;margin-bottom:14px}
+  .lede{font-family:var(--serif);font-size:clamp(17px,2vw,20px);
+        color:var(--txt);line-height:1.7;max-width:56ch}
+  section{padding:64px 0;border-bottom:1px solid var(--line)}
+  .cols{display:grid;grid-template-columns:minmax(260px,38ch) 1fr;gap:44px;align-items:start}
+  @media(max-width:840px){.cols{grid-template-columns:1fr}}
+  p+p{margin-top:14px}
+  .fig{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       padding:18px;overflow-x:auto}
+  .fig svg{display:block;min-width:560px;width:100%;height:auto}
+  .cap{font-family:var(--mono);font-size:11.5px;color:var(--dim);
+       letter-spacing:.04em;line-height:1.7;margin-top:12px;max-width:80ch}
+  .cap b{color:var(--txt);font-weight:600}
+  code,.m{font-family:var(--mono);font-size:.92em;color:var(--bright);
+     background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  table.map{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:6px}
+  table.map th{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;
+     text-transform:uppercase;color:var(--dim);text-align:left;font-weight:500;
+     padding:10px 14px;border-bottom:1px solid var(--line2)}
+  table.map td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.map td:first-child{color:var(--orange);font-family:var(--serif);
+     font-size:16px;white-space:nowrap}
+  table.map td:nth-child(2){font-family:var(--mono);font-size:13px;color:var(--bright);white-space:nowrap}
+  .keyrow{display:flex;gap:22px;flex-wrap:wrap;margin-top:16px;
+     font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
+  .keyrow .k{display:flex;align-items:center;gap:8px}
+  .sw{width:22px;height:4px;border-radius:2px;display:inline-block}
+  .results{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:8px}
+  .rcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 18px 14px}
+  .rcard .num{font-family:var(--serif);font-size:34px;color:var(--bright);line-height:1.1}
+  .rcard .num small{font-size:16px;color:var(--dim)}
+  .rcard .what{font-size:13.5px;color:var(--txt);margin-top:6px;line-height:1.55}
+  .rcard .art{font-family:var(--mono);font-size:10px;color:var(--dim);
+     margin-top:10px;letter-spacing:.03em;word-break:break-all}
+  .rcard svg{display:block;width:100%;height:auto;margin-top:10px}
+  .bounds{background:var(--panel);border:1px solid var(--line2);border-left:3px solid var(--orange);
+     border-radius:8px;padding:20px 24px;margin-top:10px}
+  .bounds ul{margin:8px 0 0 18px}
+  .bounds li{margin-top:7px;font-size:14.5px}
+  details.agent{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+     margin-top:16px;font-family:var(--mono);font-size:12.5px}
+  details.agent summary{cursor:pointer;padding:14px 18px;color:var(--teal);
+     letter-spacing:.08em;list-style:none}
+  details.agent summary::before{content:"▸ ";color:var(--dim)}
+  details.agent[open] summary::before{content:"▾ "}
+  details.agent pre{padding:0 18px 18px;white-space:pre-wrap;color:var(--txt);line-height:1.75}
+  footer{padding:44px 0 64px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:2}
+  footer a{color:var(--dim);border-bottom:1px dotted var(--line2)}
+  footer a:hover{color:var(--teal);text-decoration:none}
+  .hero{padding:72px 0 64px}
+  .hero .fig{margin-top:40px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="brand">— P R I S M</span>
+    <span class="crumb">timepointai / nanogpt-prism-shakespeare · v0.2 · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare">repo</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/WHITEPAPER.md">whitepaper</a></span>
+  </div>
+</header>
+
+<!-- ══════════════════════ HERO ══════════════════════ -->
+<section class="hero" id="metaphor">
+  <div class="wrap">
+    <div class="kicker">A spectrographic flashlight for data</div>
+    <h1>Point it at a trained model and it reads out — as a spectrum —
+        <em>how the model organized itself to learn.</em><br>
+        Then run the prism backwards into a fresh one.</h1>
+    <p class="lede" style="margin-top:22px">
+      Every trained network produces two things: the weights (what it learned) and a
+      spectral blueprint (how it arranged itself to learn it). Standard practice throws
+      the blueprint away. Prism extracts it — the singular-value spectrum and singular
+      directions of every weight matrix — and uses it to initialize and continuously
+      regularize a new model. No parameters are copied. Only geometry.
+    </p>
+
+    <figure class="fig" role="img" aria-label="The prism metaphor: a trained checkpoint shines a beam of white light into a triangular prism, which splits it into four colored spectral bands — attention, FFN up, FFN down, embedding — each carrying a decaying spectrum curve and a fan of direction rays. A second, reversed prism recombines the bands into a fresh, untrained model.">
+    <svg viewBox="0 0 1000 400" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,monospace">
+      <defs>
+        <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#eef3fb" stop-opacity=".85"/>
+          <stop offset="1" stop-color="#eef3fb" stop-opacity=".25"/>
+        </linearGradient>
+        <linearGradient id="beam2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#eef3fb" stop-opacity=".2"/>
+          <stop offset="1" stop-color="#eef3fb" stop-opacity=".8"/>
+        </linearGradient>
+        <linearGradient id="bO" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffb454" stop-opacity=".9"/><stop offset="1" stop-color="#ffb454" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="bT" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2dd4bf" stop-opacity=".9"/><stop offset="1" stop-color="#2dd4bf" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="bV" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#a78bfa" stop-opacity=".9"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="bP" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#f472b6" stop-opacity=".9"/><stop offset="1" stop-color="#f472b6" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="bO2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#ffb454" stop-opacity=".15"/><stop offset="1" stop-color="#ffb454" stop-opacity=".9"/>
+        </linearGradient>
+        <linearGradient id="bT2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2dd4bf" stop-opacity=".15"/><stop offset="1" stop-color="#2dd4bf" stop-opacity=".9"/>
+        </linearGradient>
+        <linearGradient id="bV2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#a78bfa" stop-opacity=".15"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".9"/>
+        </linearGradient>
+        <linearGradient id="bP2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#f472b6" stop-opacity=".15"/><stop offset="1" stop-color="#f472b6" stop-opacity=".9"/>
+        </linearGradient>
+      </defs>
+
+      <!-- READ side: teacher chip -->
+      <rect x="22" y="150" width="128" height="88" rx="10" fill="#0e1524" stroke="#28324a"/>
+      <text x="86" y="186" text-anchor="middle" fill="#eef3fb" font-size="12">TRAINED</text>
+      <text x="86" y="203" text-anchor="middle" fill="#eef3fb" font-size="12">CHECKPOINT</text>
+      <text x="86" y="222" text-anchor="middle" fill="#7d8aa0" font-size="10">any W = UΣVᵀ</text>
+
+      <!-- white beam -->
+      <polygon points="150,184 300,178 300,210 150,204" fill="url(#beam)"/>
+      <text x="222" y="172" text-anchor="middle" fill="#7d8aa0" font-size="10">white light = raw weights</text>
+
+      <!-- prism (read) -->
+      <polygon points="300,120 380,270 220,270" fill="#0e1524" fill-opacity=".7" stroke="#eef3fb" stroke-opacity=".55" stroke-width="1.4"/>
+      <text x="300" y="252" text-anchor="middle" fill="#ffb454" font-size="12" letter-spacing="3">PRISM</text>
+      <text x="300" y="292" text-anchor="middle" fill="#7d8aa0" font-size="10">SVD, per weight group</text>
+
+      <!-- spectral fan -->
+      <polygon points="345,186 560,96  560,114 345,194" fill="url(#bO)"/>
+      <polygon points="345,192 560,158 560,176 345,200" fill="url(#bT)"/>
+      <polygon points="345,198 560,220 560,238 345,206" fill="url(#bV)"/>
+      <polygon points="345,204 560,282 560,300 345,212" fill="url(#bP)"/>
+      <text x="572" y="109" fill="#ffb454" font-size="11">attention</text>
+      <text x="572" y="171" fill="#2dd4bf" font-size="11">ffn · up</text>
+      <text x="572" y="233" fill="#a78bfa" font-size="11">ffn · down</text>
+      <text x="572" y="295" fill="#f472b6" font-size="11">embedding</text>
+      <!-- tiny spectra on two bands -->
+      <polyline points="480,104 488,106 496,109 504,113 512,118 520,124 528,129 536,133 544,136 552,138"
+                fill="none" stroke="#06090f" stroke-width="1.6" opacity=".85"/>
+      <polyline points="480,166 488,168 496,171 504,175 512,180 520,186 528,191 536,195 544,198 552,200"
+                fill="none" stroke="#06090f" stroke-width="1.6" opacity=".85"/>
+      <text x="500" y="86" fill="#7d8aa0" font-size="10">each band = a spectrum (energy) + directions (axes)</text>
+
+      <!-- WRITE side: reversed prism -->
+      <polygon points="700,120 780,270 620,270" fill="#0e1524" fill-opacity=".7" stroke="#eef3fb" stroke-opacity=".55" stroke-width="1.4"/>
+      <text x="700" y="252" text-anchor="middle" fill="#2dd4bf" font-size="12" letter-spacing="3">PRISM⁻¹</text>
+      <text x="700" y="292" text-anchor="middle" fill="#7d8aa0" font-size="10">imprint + align + hold</text>
+
+      <!-- bands converging -->
+      <polygon points="655,186 560,114 560,96  655,194" fill="url(#bO2)" transform="translate(0,0)"/>
+      <polygon points="655,192 560,176 560,158 655,200" fill="url(#bT2)"/>
+      <polygon points="655,198 560,238 560,220 655,206" fill="url(#bV2)"/>
+      <polygon points="655,204 560,300 560,282 655,212" fill="url(#bP2)"/>
+
+      <!-- recombined beam -->
+      <polygon points="745,178 852,184 852,204 745,210" fill="url(#beam2)"/>
+
+      <!-- student chip -->
+      <rect x="852" y="150" width="128" height="88" rx="10" fill="#0e1524" stroke="#2dd4bf" stroke-opacity=".6"/>
+      <text x="916" y="186" text-anchor="middle" fill="#eef3fb" font-size="12">FRESH MODEL</text>
+      <text x="916" y="203" text-anchor="middle" fill="#eef3fb" font-size="12">accelerated</text>
+      <text x="916" y="222" text-anchor="middle" fill="#7d8aa0" font-size="10">learns its own content</text>
+
+      <!-- footer strip -->
+      <text x="86"  y="358" text-anchor="middle" fill="#7d8aa0" font-size="10.5" letter-spacing="2">READ</text>
+      <line x1="140" y1="354" x2="470" y2="354" stroke="#1c2333"/>
+      <text x="500" y="358" text-anchor="middle" fill="#7d8aa0" font-size="10.5" letter-spacing="2">~128 BYTES / GROUP + DIRECTIONS</text>
+      <line x1="536" y1="354" x2="862" y2="354" stroke="#1c2333"/>
+      <text x="916" y="358" text-anchor="middle" fill="#7d8aa0" font-size="10.5" letter-spacing="2">WRITE</text>
+      <text x="500" y="385" text-anchor="middle" fill="#535f74" font-size="10">the same optics, run in both directions — extraction is a decomposition, application is its inverse</text>
+    </svg>
+    </figure>
+    <p class="cap"><b>The original idea, kept as the working metaphor.</b> A spectrographic
+      flashlight for data: shine it at information — here, a trained checkpoint — and it
+      parses the light into attribute bands you can measure, store, and re-project. The
+      left prism is <b>extraction</b> (SVD per weight group); the right prism runs
+      <b>backwards</b> (initialization + regularization of a fresh model). What travels
+      between them is geometry, never content.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════ MAPPING ══════════════════════ -->
+<section id="mapping">
+  <div class="wrap">
+    <div class="kicker"><span class="n">00</span>The metaphor, made precise</div>
+    <h2>Every part of the picture is a real mathematical object.</h2>
+    <table class="map" aria-label="Metaphor to math mapping">
+      <tr><th>in the picture</th><th>in the math</th><th>what it is</th></tr>
+      <tr><td>white light</td><td>W ∈ ℝ<sup>m×n</sup></td>
+          <td>a trained weight matrix — content and organization mixed together, unreadable directly</td></tr>
+      <tr><td>the prism</td><td>W = U Σ Vᵀ</td>
+          <td>singular value decomposition — the one factorization that cleanly separates <em>how much energy</em> from <em>which directions</em></td></tr>
+      <tr><td>the spectrum</td><td>σ₁ ≥ σ₂ ≥ … ≥ σᵣ</td>
+          <td>the singular values: how the model distributes representational energy. Trained models have heavy-tailed, decidedly non-random spectra</td></tr>
+      <tr><td>each color band</td><td>weight group</td>
+          <td>attention, FFN-up, FFN-down, embedding — matrices of the same role share a characteristic spectral shape, so their spectra are averaged per group</td></tr>
+      <tr><td>the photograph<br>of the spectrum</td><td>8 DCT coefficients</td>
+          <td>the group-averaged spectrum is a smooth decaying curve; a least-squares fit of 8 cosine terms (in inverse-softplus space) captures it to ~0.03 mean abs error. ~128 bytes total</td></tr>
+      <tr><td>polarization<br>of each band</td><td>U, V</td>
+          <td>the singular directions: which subspaces the model decided were worth using. Large (~500 MB uncompressed), dimension-specific</td></tr>
+      <tr><td>the reversed prism</td><td>imprint · align · hold</td>
+          <td>the three write-side operations (§02): reshape the student's spectrum, rotate its directions toward the teacher's, and keep pulling it back as it trains</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════════ NODE LEVEL ══════════════════════ -->
+<section id="node">
+  <div class="wrap">
+    <div class="kicker"><span class="n">01</span>One node — a single weight matrix</div>
+    <div class="cols">
+      <div>
+        <h2>What the flashlight sees when it hits one matrix.</h2>
+        <p>Take any trained weight matrix and decompose it: <code>W = UΣVᵀ</code>.
+           The spectrum <code>Σ</code> says how much the matrix concentrates its energy
+           into few directions (trained matrices concentrate hard; random ones don't).
+           The directions <code>U, V</code> say <em>where</em>.</p>
+        <p>The spectrum compresses brutally well — it is a smooth curve, and eight
+           cosine coefficients reconstruct it almost exactly. The directions do not
+           compress; they are carried whole. That asymmetry is honest and load-bearing:
+           "128 bytes" describes the spectral tier of the method, not all of it.</p>
+        <p>On the write side, three operations move the geometry into a fresh matrix
+           <code>W′</code> — and the third one never stops running.</p>
+      </div>
+      <div>
+        <figure class="fig" role="img" aria-label="Node-level pipeline: a weight matrix is decomposed by SVD into directions U, spectrum Sigma, and directions V-transpose. The spectrum curve is fit by 8 DCT coefficients which reconstruct it closely. Three write operations follow: spectral imprint reshapes the student's singular values, eigentransfer blends its singular vectors 75 percent toward the teacher's, and the mod wheel pulls the weights back toward the spectral target after every optimizer step with strength 0.01 decaying by 0.9999.">
+        <svg viewBox="0 0 880 560" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,monospace">
+          <!-- row 1: SVD -->
+          <text x="20" y="28" fill="#7d8aa0" font-size="10.5" letter-spacing="2">READ · DECOMPOSE</text>
+          <rect x="20" y="44" width="96" height="96" rx="6" fill="#0e1524" stroke="#28324a"/>
+          <text x="68" y="98" text-anchor="middle" fill="#eef3fb" font-size="15">W</text>
+          <text x="68" y="156" text-anchor="middle" fill="#7d8aa0" font-size="10">trained</text>
+          <text x="140" y="98" fill="#7d8aa0" font-size="14">=</text>
+          <rect x="166" y="44" width="72" height="96" rx="6" fill="#0e1524" stroke="#ffb454" stroke-opacity=".5"/>
+          <text x="202" y="98" text-anchor="middle" fill="#ffb454" font-size="14">U</text>
+          <text x="202" y="156" text-anchor="middle" fill="#7d8aa0" font-size="10">directions</text>
+          <rect x="252" y="44" width="72" height="96" rx="6" fill="#0e1524" stroke="#2dd4bf" stroke-opacity=".5"/>
+          <text x="288" y="76" text-anchor="middle" fill="#2dd4bf" font-size="14">Σ</text>
+          <!-- diagonal dots -->
+          <circle cx="270" cy="94" r="4.5" fill="#2dd4bf"/><circle cx="281" cy="103" r="3.6" fill="#2dd4bf" opacity=".8"/>
+          <circle cx="292" cy="112" r="2.8" fill="#2dd4bf" opacity=".6"/><circle cx="303" cy="121" r="2.1" fill="#2dd4bf" opacity=".45"/>
+          <circle cx="313" cy="129" r="1.5" fill="#2dd4bf" opacity=".3"/>
+          <text x="288" y="156" text-anchor="middle" fill="#7d8aa0" font-size="10">spectrum</text>
+          <rect x="338" y="44" width="72" height="96" rx="6" fill="#0e1524" stroke="#ffb454" stroke-opacity=".5"/>
+          <text x="374" y="98" text-anchor="middle" fill="#ffb454" font-size="14">Vᵀ</text>
+          <text x="374" y="156" text-anchor="middle" fill="#7d8aa0" font-size="10">directions</text>
+
+          <!-- spectrum → DCT -->
+          <text x="470" y="28" fill="#7d8aa0" font-size="10.5" letter-spacing="2">COMPRESS · 8 DCT COEFFS ≈ 128 BYTES / GROUP</text>
+          <rect x="470" y="44" width="390" height="128" rx="6" fill="#0e1524" stroke="#28324a"/>
+          <!-- axes -->
+          <line x1="494" y1="60" x2="494" y2="152" stroke="#28324a"/>
+          <line x1="494" y1="152" x2="700" y2="152" stroke="#28324a"/>
+          <!-- true spectrum -->
+          <path d="M 494,66 C 530,70 550,86 574,106 C 598,126 640,142 700,148"
+                fill="none" stroke="#2dd4bf" stroke-width="2"/>
+          <!-- reconstruction -->
+          <path d="M 496,70 C 532,72 554,90 578,109 C 602,128 642,145 700,150"
+                fill="none" stroke="#ffb454" stroke-width="1.6" stroke-dasharray="5,4"/>
+          <text x="588" y="76" fill="#2dd4bf" font-size="10">σ (group-averaged)</text>
+          <text x="588" y="92" fill="#ffb454" font-size="10">8-coeff reconstruction</text>
+          <text x="588" y="108" fill="#7d8aa0" font-size="10">mean abs err ~0.03</text>
+          <!-- coefficient bars -->
+          <g fill="#2dd4bf">
+            <rect x="726" y="82"  width="9" height="70" rx="2"/>
+            <rect x="741" y="112" width="9" height="40" rx="2" opacity=".85"/>
+            <rect x="756" y="126" width="9" height="26" rx="2" opacity=".7"/>
+            <rect x="771" y="134" width="9" height="18" rx="2" opacity=".6"/>
+            <rect x="786" y="139" width="9" height="13" rx="2" opacity=".5"/>
+            <rect x="801" y="143" width="9" height="9"  rx="2" opacity=".4"/>
+            <rect x="816" y="146" width="9" height="6"  rx="2" opacity=".35"/>
+            <rect x="831" y="148" width="9" height="4"  rx="2" opacity=".3"/>
+          </g>
+          <text x="783" y="168" text-anchor="middle" fill="#7d8aa0" font-size="10">c₀…c₇</text>
+
+          <!-- divider -->
+          <line x1="20" y1="204" x2="860" y2="204" stroke="#1c2333"/>
+          <text x="20" y="232" fill="#7d8aa0" font-size="10.5" letter-spacing="2">WRITE · THREE OPERATIONS ON THE STUDENT W′</text>
+
+          <!-- op 1: imprint -->
+          <rect x="20" y="250" width="262" height="250" rx="8" fill="#0b101c" stroke="#1c2333"/>
+          <text x="38" y="280" fill="#2dd4bf" font-size="12" letter-spacing="1">1 · SPECTRAL IMPRINT</text>
+          <text x="38" y="300" fill="#7d8aa0" font-size="10">at init · reshape σ′ to match the teacher</text>
+          <!-- random flat spectrum -> shaped -->
+          <line x1="46" y1="440" x2="250" y2="440" stroke="#28324a"/>
+          <path d="M 46,392 C 90,388 160,390 250,394" fill="none" stroke="#535f74" stroke-width="1.8" stroke-dasharray="3,4"/>
+          <text x="150" y="378" text-anchor="middle" fill="#535f74" font-size="10">random init: flat σ′</text>
+          <path d="M 46,330 C 84,336 110,360 140,392 C 170,418 214,430 250,434" fill="none" stroke="#2dd4bf" stroke-width="2.2"/>
+          <text x="150" y="466" text-anchor="middle" fill="#2dd4bf" font-size="10">reshaped to the teacher's curve</text>
+          <path d="M 120,388 L 112,362" stroke="#2dd4bf" stroke-width="1.2" marker-end="none"/>
+          <path d="M 190,398 L 196,424" stroke="#2dd4bf" stroke-width="1.2"/>
+
+          <!-- op 2: eigentransfer -->
+          <rect x="308" y="250" width="262" height="250" rx="8" fill="#0b101c" stroke="#1c2333"/>
+          <text x="326" y="280" fill="#ffb454" font-size="12" letter-spacing="1">2 · EIGENTRANSFER</text>
+          <text x="326" y="300" fill="#7d8aa0" font-size="10">at init · U′ ← (1−α)U′ + αU, α = 0.75</text>
+          <g transform="translate(439,405)">
+            <circle r="76" fill="none" stroke="#28324a"/>
+            <!-- student axes (random) -->
+            <line x1="0" y1="0" x2="52" y2="-42" stroke="#535f74" stroke-width="1.6" stroke-dasharray="3,4"/>
+            <line x1="0" y1="0" x2="-38" y2="-54" stroke="#535f74" stroke-width="1.6" stroke-dasharray="3,4"/>
+            <!-- teacher axes -->
+            <line x1="0" y1="0" x2="72" y2="-14" stroke="#ffb454" stroke-width="1.8" opacity=".55"/>
+            <line x1="0" y1="0" x2="-16" y2="-72" stroke="#ffb454" stroke-width="1.8" opacity=".55"/>
+            <!-- blended result -->
+            <line x1="0" y1="0" x2="68" y2="-24" stroke="#eef3fb" stroke-width="2.2"/>
+            <line x1="0" y1="0" x2="-23" y2="-68" stroke="#eef3fb" stroke-width="2.2"/>
+            <!-- arc showing rotation -->
+            <path d="M 42,-34 A 54 54 0 0 1 55,-19" fill="none" stroke="#ffb454" stroke-width="1.2"/>
+            <text x="0" y="94" text-anchor="middle" fill="#7d8aa0" font-size="10">rotate toward teacher axes,</text>
+            <text x="0" y="108" text-anchor="middle" fill="#7d8aa0" font-size="10" dy="-2">then re-orthogonalize</text>
+          </g>
+          <text x="326" y="320" fill="#535f74" font-size="10">dashed = student · amber = teacher · white = blend</text>
+
+          <!-- op 3: mod wheel -->
+          <rect x="596" y="250" width="264" height="250" rx="8" fill="#0b101c" stroke="#1c2333"/>
+          <text x="614" y="280" fill="#a78bfa" font-size="12" letter-spacing="1">3 · MOD WHEEL</text>
+          <text x="614" y="300" fill="#7d8aa0" font-size="10">every step · W′ ← (1−s)W′ + s·W_target</text>
+          <g transform="translate(728,400)">
+            <!-- target ring -->
+            <circle r="62" fill="none" stroke="#a78bfa" stroke-opacity=".35" stroke-width="1.4"/>
+            <text x="0" y="-72" text-anchor="middle" fill="#a78bfa" font-size="10">spectral target</text>
+            <!-- drifting trajectory pulled back -->
+            <path d="M -40,30 C -20,10 6,2 22,14 C 38,26 46,10 40,-8 C 34,-24 12,-34 -6,-28"
+                  fill="none" stroke="#eef3fb" stroke-width="1.8"/>
+            <circle cx="-6" cy="-28" r="3.4" fill="#eef3fb"/>
+            <!-- pull arrows -->
+            <line x1="46" y1="10" x2="58" y2="12" stroke="#a78bfa" stroke-width="1.3"/>
+            <line x1="22" y1="14" x2="14" y2="26" stroke="#a78bfa" stroke-width="1.3"/>
+            <text x="0" y="92" text-anchor="middle" fill="#7d8aa0" font-size="10">learn freely inside the shape;</text>
+            <text x="0" y="106" text-anchor="middle" fill="#7d8aa0" font-size="10">never drift out of it</text>
+          </g>
+          <text x="614" y="320" fill="#535f74" font-size="10">s = 0.01, ×0.9999 per step · zero storage</text>
+        </svg>
+        </figure>
+        <p class="cap"><b>Why the third operation matters most.</b> Overfitting, seen
+          geometrically, is the weight matrices drifting out of the task-aligned
+          subspace they should occupy. The mod wheel makes the transferred shape a
+          <b>standing constraint</b>, not just a starting point — which is why the
+          recipe holds its best loss for thousands of steps where the from-scratch
+          baseline peaks and collapses.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ GRAPH LEVEL ══════════════════════ -->
+<section id="graph">
+  <div class="wrap">
+    <div class="kicker"><span class="n">02</span>The whole graph — a model's matrices as nodes</div>
+    <div class="cols">
+      <div>
+        <h2>Geometry moves between graphs. Content never does.</h2>
+        <p>Zoom out: a transformer is a graph of weight matrices. Prism treats every
+           node the same way — but the <em>spectrum</em> is shared per color (weight
+           group), while the <em>directions</em> stay per-node. Four spectral
+           photographs describe the energy layout of the entire network; each node
+           additionally receives its own directional rotation.</p>
+        <p>Look at what crosses the gap and what doesn't. The teacher's activations,
+           logits, data, and learned associations stay home. What crosses is the
+           organizational grammar: how sharply each kind of matrix concentrates
+           energy, and which axes it concentrates it on.</p>
+        <p>This is what makes the measured results possible: a student trained on
+           <em>disjoint</em> data — or a <em>different corpus</em> — inherits the full
+           head start, because the head start was never about the data.</p>
+        <div class="keyrow" aria-hidden="true">
+          <span class="k"><span class="sw" style="background:#ffb454"></span>attention</span>
+          <span class="k"><span class="sw" style="background:#2dd4bf"></span>ffn up</span>
+          <span class="k"><span class="sw" style="background:#a78bfa"></span>ffn down</span>
+          <span class="k"><span class="sw" style="background:#f472b6"></span>embedding</span>
+        </div>
+      </div>
+      <div>
+        <figure class="fig" role="img" aria-label="Graph-level view: the teacher transformer drawn as a graph of weight-matrix nodes across three layers plus an embedding node, each node colored by weight group with ring thickness showing spectral energy. Per-group spectra are pooled into four spectrum chips. Dashed geometry lines cross to the student graph, whose nodes begin as dashed random circles and receive solid colored rings. The student's own gradient flow is separate, showing that content is learned locally while geometry is inherited.">
+        <svg viewBox="0 0 880 520" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,Menlo,monospace">
+          <!-- ═══ teacher graph ═══ -->
+          <text x="150" y="30" text-anchor="middle" fill="#eef3fb" font-size="12" letter-spacing="2">TEACHER</text>
+          <text x="150" y="48" text-anchor="middle" fill="#7d8aa0" font-size="10">trained · knows things</text>
+
+          <!-- embedding -->
+          <circle cx="150" cy="96" r="15" fill="#0e1524" stroke="#f472b6" stroke-width="3"/>
+          <text x="186" y="100" fill="#7d8aa0" font-size="9.5">emb</text>
+          <!-- layers: attn, ffn-up, ffn-down chains -->
+          <!-- L1 -->
+          <line x1="150" y1="111" x2="150" y2="141" stroke="#28324a"/>
+          <circle cx="150" cy="156" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3.4"/>
+          <line x1="150" y1="171" x2="106" y2="201" stroke="#28324a"/>
+          <line x1="150" y1="171" x2="194" y2="201" stroke="#28324a"/>
+          <circle cx="106" cy="216" r="13" fill="#0e1524" stroke="#2dd4bf" stroke-width="2.8"/>
+          <circle cx="194" cy="216" r="13" fill="#0e1524" stroke="#a78bfa" stroke-width="2.8"/>
+          <line x1="106" y1="229" x2="150" y2="261" stroke="#28324a"/>
+          <line x1="194" y1="229" x2="150" y2="261" stroke="#28324a"/>
+          <!-- L2 -->
+          <circle cx="150" cy="276" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3.4"/>
+          <line x1="150" y1="291" x2="106" y2="321" stroke="#28324a"/>
+          <line x1="150" y1="291" x2="194" y2="321" stroke="#28324a"/>
+          <circle cx="106" cy="336" r="13" fill="#0e1524" stroke="#2dd4bf" stroke-width="2.8"/>
+          <circle cx="194" cy="336" r="13" fill="#0e1524" stroke="#a78bfa" stroke-width="2.8"/>
+          <line x1="106" y1="349" x2="150" y2="381" stroke="#28324a"/>
+          <line x1="194" y1="349" x2="150" y2="381" stroke="#28324a"/>
+          <!-- L3 -->
+          <circle cx="150" cy="396" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3.4"/>
+          <text x="150" y="436" text-anchor="middle" fill="#535f74" font-size="9.5">… n layers · ring = spectral energy</text>
+
+          <!-- group pooling brackets to spectrum chips -->
+          <path d="M 172,156 C 236,156 240,150 268,142" fill="none" stroke="#ffb454" stroke-opacity=".45" stroke-width="1.1"/>
+          <path d="M 172,276 C 236,276 240,180 268,148" fill="none" stroke="#ffb454" stroke-opacity=".45" stroke-width="1.1"/>
+          <path d="M 172,396 C 240,396 244,210 268,154" fill="none" stroke="#ffb454" stroke-opacity=".45" stroke-width="1.1"/>
+          <!-- spectrum chips column -->
+          <g transform="translate(268,120)">
+            <rect width="112" height="56" rx="6" fill="#0e1524" stroke="#ffb454" stroke-opacity=".6"/>
+            <path d="M 12,14 C 30,18 44,30 60,40 C 76,48 90,50 100,50" fill="none" stroke="#ffb454" stroke-width="1.8"/>
+            <text x="56" y="70" text-anchor="middle" fill="#7d8aa0" font-size="9">attention · pooled σ</text>
+          </g>
+          <g transform="translate(268,204)">
+            <rect width="112" height="56" rx="6" fill="#0e1524" stroke="#2dd4bf" stroke-opacity=".6"/>
+            <path d="M 12,12 C 26,20 40,34 58,42 C 76,48 90,50 100,50" fill="none" stroke="#2dd4bf" stroke-width="1.8"/>
+            <text x="56" y="70" text-anchor="middle" fill="#7d8aa0" font-size="9">ffn up · pooled σ</text>
+          </g>
+          <g transform="translate(268,288)">
+            <rect width="112" height="56" rx="6" fill="#0e1524" stroke="#a78bfa" stroke-opacity=".6"/>
+            <path d="M 12,16 C 28,22 42,32 60,40 C 78,47 92,50 100,50" fill="none" stroke="#a78bfa" stroke-width="1.8"/>
+            <text x="56" y="70" text-anchor="middle" fill="#7d8aa0" font-size="9">ffn down · pooled σ</text>
+          </g>
+          <g transform="translate(268,372)">
+            <rect width="112" height="56" rx="6" fill="#0e1524" stroke="#f472b6" stroke-opacity=".6"/>
+            <path d="M 12,10 C 24,22 40,36 58,44 C 76,49 92,51 100,51" fill="none" stroke="#f472b6" stroke-width="1.8"/>
+            <text x="56" y="70" text-anchor="middle" fill="#7d8aa0" font-size="9">embedding · pooled σ</text>
+          </g>
+          <path d="M 128,216 C 200,232 232,232 268,230" fill="none" stroke="#2dd4bf" stroke-opacity=".4" stroke-width="1.1"/>
+          <path d="M 128,336 C 200,330 232,320 268,308" fill="none" stroke="#a78bfa" stroke-opacity=".4" stroke-width="1.1"/>
+          <path d="M 168,96 C 224,96 244,240 268,372" fill="none" stroke="#f472b6" stroke-opacity=".4" stroke-width="1.1"/>
+
+          <!-- ═══ the crossing ═══ -->
+          <text x="470" y="30" text-anchor="middle" fill="#7d8aa0" font-size="10.5" letter-spacing="2">WHAT CROSSES</text>
+          <g stroke-width="1.6" fill="none">
+            <path d="M 380,148 C 440,148 460,140 512,140" stroke="#ffb454" stroke-dasharray="6,5"/>
+            <path d="M 380,232 C 440,232 460,230 512,230" stroke="#2dd4bf" stroke-dasharray="6,5"/>
+            <path d="M 380,316 C 440,316 460,320 512,320" stroke="#a78bfa" stroke-dasharray="6,5"/>
+            <path d="M 380,400 C 440,400 460,404 512,404" stroke="#f472b6" stroke-dasharray="6,5"/>
+          </g>
+          <text x="447" y="132" text-anchor="middle" fill="#7d8aa0" font-size="9.5">4 spectra (~128 B)</text>
+          <text x="447" y="222" text-anchor="middle" fill="#7d8aa0" font-size="9.5">+ per-node directions</text>
+          <!-- what does NOT cross -->
+          <g transform="translate(400,458)">
+            <rect width="140" height="34" rx="6" fill="none" stroke="#28324a"/>
+            <line x1="10" y1="27" x2="130" y2="7" stroke="#f472b6" stroke-width="1.2" opacity=".7"/>
+            <text x="70" y="21" text-anchor="middle" fill="#535f74" font-size="9.5">weights · data · content</text>
+          </g>
+          <text x="470" y="512" text-anchor="middle" fill="#7d8aa0" font-size="9.5">nothing the teacher KNOWS crosses — only how it is ORGANIZED</text>
+
+          <!-- ═══ student graph ═══ -->
+          <text x="660" y="30" text-anchor="middle" fill="#eef3fb" font-size="12" letter-spacing="2">STUDENT</text>
+          <text x="660" y="48" text-anchor="middle" fill="#7d8aa0" font-size="10">fresh · learns its own content</text>
+
+          <circle cx="660" cy="96" r="15" fill="#0e1524" stroke="#f472b6" stroke-width="2.6"/>
+          <circle cx="660" cy="96" r="21" fill="none" stroke="#535f74" stroke-dasharray="2,4" stroke-width="1"/>
+          <line x1="660" y1="111" x2="660" y2="141" stroke="#28324a"/>
+          <circle cx="660" cy="156" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3"/>
+          <circle cx="660" cy="156" r="21" fill="none" stroke="#535f74" stroke-dasharray="2,4" stroke-width="1"/>
+          <line x1="660" y1="171" x2="616" y2="201" stroke="#28324a"/>
+          <line x1="660" y1="171" x2="704" y2="201" stroke="#28324a"/>
+          <circle cx="616" cy="216" r="13" fill="#0e1524" stroke="#2dd4bf" stroke-width="2.6"/>
+          <circle cx="704" cy="216" r="13" fill="#0e1524" stroke="#a78bfa" stroke-width="2.6"/>
+          <line x1="616" y1="229" x2="660" y2="261" stroke="#28324a"/>
+          <line x1="704" y1="229" x2="660" y2="261" stroke="#28324a"/>
+          <circle cx="660" cy="276" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3"/>
+          <circle cx="660" cy="276" r="21" fill="none" stroke="#535f74" stroke-dasharray="2,4" stroke-width="1"/>
+          <line x1="660" y1="291" x2="616" y2="321" stroke="#28324a"/>
+          <line x1="660" y1="291" x2="704" y2="321" stroke="#28324a"/>
+          <circle cx="616" cy="336" r="13" fill="#0e1524" stroke="#2dd4bf" stroke-width="2.6"/>
+          <circle cx="704" cy="336" r="13" fill="#0e1524" stroke="#a78bfa" stroke-width="2.6"/>
+          <line x1="616" y1="349" x2="660" y2="381" stroke="#28324a"/>
+          <line x1="704" y1="349" x2="660" y2="381" stroke="#28324a"/>
+          <circle cx="660" cy="396" r="15" fill="#0e1524" stroke="#ffb454" stroke-width="3"/>
+          <circle cx="660" cy="396" r="21" fill="none" stroke="#535f74" stroke-dasharray="2,4" stroke-width="1"/>
+          <text x="660" y="436" text-anchor="middle" fill="#535f74" font-size="9.5">dashed halo = mod wheel holding the shape</text>
+
+          <!-- student's own data -->
+          <rect x="770" y="200" width="92" height="120" rx="8" fill="#0e1524" stroke="#28324a"/>
+          <text x="816" y="238" text-anchor="middle" fill="#eef3fb" font-size="10.5">its OWN</text>
+          <text x="816" y="254" text-anchor="middle" fill="#eef3fb" font-size="10.5">data</text>
+          <text x="816" y="278" text-anchor="middle" fill="#7d8aa0" font-size="9">same corpus,</text>
+          <text x="816" y="292" text-anchor="middle" fill="#7d8aa0" font-size="9">disjoint, or</text>
+          <text x="816" y="306" text-anchor="middle" fill="#7d8aa0" font-size="9">a different one</text>
+          <path d="M 770,246 C 744,236 726,228 706,222" fill="none" stroke="#eef3fb" stroke-opacity=".5" stroke-width="1.4"/>
+          <path d="M 770,286 C 744,300 726,316 706,330" fill="none" stroke="#eef3fb" stroke-opacity=".5" stroke-width="1.4"/>
+          <text x="748" y="212" fill="#7d8aa0" font-size="9">gradients</text>
+        </svg>
+        </figure>
+        <p class="cap"><b>Reading the picture.</b> Node color = weight group · ring
+          thickness = spectral energy · dashed halo on the student = the mod wheel's
+          standing pull. The four pooled spectrum chips are the "photograph" — the
+          whole network's energy layout in ~128 bytes. Directions travel per-node
+          (the heavy tier). Gradients on the right come from the <b>student's own
+          data only</b>; the measured results below show it does not matter whether
+          that data overlaps the teacher's at all.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ RESULTS ══════════════════════ -->
+<section id="results">
+  <div class="wrap">
+    <div class="kicker"><span class="n">03</span>What the measurements say</div>
+    <h2>Every number has a committed artifact. That is the house rule.</h2>
+    <p style="max-width:70ch;margin-bottom:22px">nanoGPT Shakespeare-char, 10.65M
+       parameters, three seeds per run, NVIDIA L4. Artifacts live in
+       <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/tree/master/results"><code>results/</code></a>
+       with full loss curves, provenance, and censoring flags.</p>
+    <div class="results">
+      <div class="rcard">
+        <div class="num">11.8×<small> median</small></div>
+        <div class="what">Steps to the from-scratch baseline's best quality: ~100 vs ~1,200. Resolved, not a bound (10.2–11.9×). 7.0× under the strictest control — baseline's own LR, only spectral flags differ.</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <line x1="6" y1="44" x2="194" y2="44" stroke="#1c2333"/>
+          <path d="M 6,10 C 40,14 90,22 140,34 C 165,39 185,42 194,43" fill="none" stroke="#f472b6" stroke-width="1.8"/>
+          <path d="M 6,10 C 14,26 20,38 28,43" fill="none" stroke="#2dd4bf" stroke-width="2.2"/>
+          <circle cx="28" cy="43" r="2.6" fill="#2dd4bf"/><circle cx="176" cy="41.5" r="2.6" fill="#f472b6"/>
+          <text x="36" y="52" fill="#2dd4bf" font-size="8" font-family="ui-monospace,monospace">step ~100</text>
+          <text x="140" y="34" fill="#f472b6" font-size="8" font-family="ui-monospace,monospace">step ~1,200</text>
+        </svg>
+        <div class="art">recipe_20260721T142104Z · recipe_20260720T230405Z</div>
+      </div>
+      <div class="rcard">
+        <div class="num">flat<small> across overlap</small></div>
+        <div class="what">The early advantage (~23% lower loss) is identical whether teacher and student share 100% or 0% of their data — difficulty-controlled, 12 overlap points. It was never about shared content.</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <line x1="6" y1="44" x2="194" y2="44" stroke="#1c2333"/>
+          <polyline points="6,14 40,13 74,15 108,14 142,13 176,14 194,14" fill="none" stroke="#2dd4bf" stroke-width="1.8"/>
+          <text x="6" y="30" fill="#7d8aa0" font-size="8" font-family="ui-monospace,monospace">Δloss ~0.58, overlap 1.0 → 0.0</text>
+        </svg>
+        <div class="art">recipe_20260721T050203Z</div>
+      </div>
+      <div class="rcard">
+        <div class="num">0.59→0.63<small> Δloss</small></div>
+        <div class="what">Cross-domain: a Shakespeare teacher accelerates learning of Sherlock Holmes — student trained and scored on Sherlock — at least as much as Shakespeare. The gap grows with distance.</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <line x1="6" y1="44" x2="194" y2="44" stroke="#1c2333"/>
+          <polyline points="6,18 53,18.2 100,17.8 147,15.5 194,12.5" fill="none" stroke="#ffb454" stroke-width="1.8"/>
+          <text x="6" y="34" fill="#7d8aa0" font-size="8" font-family="ui-monospace,monospace">token-JS 0 → 0.027 (all-Sherlock)</text>
+        </svg>
+        <div class="art">recipe_20260721T161208Z</div>
+      </div>
+      <div class="rcard">
+        <div class="num">saturates ≈2k<small> lever</small></div>
+        <div class="what">The advantage grows monotonically with teacher training (−0.069 → +0.46) and plateaus at ~2,000 steps — right where the teacher itself converges (4k/8k flat). Sharp edge: a weak teacher is worse than random init.</div>
+        <svg viewBox="0 0 200 54" aria-hidden="true">
+          <line x1="6" y1="36" x2="194" y2="36" stroke="#1c2333" stroke-dasharray="3,3"/>
+          <polyline points="10,44 48,30 86,19 124,10 148,7 170,6.5 190,7" fill="none" stroke="#a78bfa" stroke-width="1.8"/>
+          <circle cx="10" cy="44" r="2.6" fill="#f472b6"/>
+          <text x="20" y="50" fill="#f472b6" font-size="8" font-family="ui-monospace,monospace">below zero</text>
+          <text x="126" y="22" fill="#7d8aa0" font-size="8" font-family="ui-monospace,monospace">plateau</text>
+        </svg>
+        <div class="art">recipe_20260721T143246Z · recipe_20260721T172238Z</div>
+      </div>
+    </div>
+
+    <div class="bounds">
+      <strong style="color:var(--orange);font-family:var(--mono);font-size:11px;letter-spacing:.25em">HONEST BOUNDS</strong>
+      <ul>
+        <li>The transfer measurements are <strong>early-window probes</strong> (step 100, init-dominated); the speed and no-overfitting results are longer runs (1,500–5,000 steps) but same-data.</li>
+        <li>"Different corpus" means Sherlock Holmes — a different author, still English prose over the same character vocabulary. Code or another language is the untested frontier.</li>
+        <li>Spectral vs. <em>generic</em> regularization is not yet isolated by a direct control; the teacher-strength dependence is suggestive, not a substitute.</li>
+        <li>Everything is 10.65M parameters and ~1M-token corpora. Nothing here has met a production model.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ AGENT SUMMARY ══════════════════════ -->
+<section id="summary">
+  <div class="wrap">
+    <div class="kicker"><span class="n">04</span>The whole thing in one breath</div>
+    <h2>A trained checkpoint carries a reusable structural prior.<br>Prism is the instrument that extracts and applies it.</h2>
+    <p style="max-width:70ch">The student never sees what the teacher knew. It inherits
+       how the teacher was <em>shaped</em> — and that shape turns out to be most of what
+       the first thousand steps of training laboriously rediscover, largely independent
+       of the data used to discover it.</p>
+    <details class="agent">
+      <summary>machine-readable summary (for agents reviewing this page)</summary>
+      <pre>
+method: Prism — from-scratch spectral transfer learning
+  extract (read):  per weight matrix W = U·Σ·Vᵀ; pool normalized singular-value
+                   spectra per weight group {attention, ffn_up, ffn_down, embedding};
+                   fit each pooled spectrum with 8 DCT coefficients via least squares
+                   in inverse-softplus space (~128 bytes total); keep U,V per matrix.
+  apply (write):   1) spectral imprint — reshape student singular values to the
+                      reconstructed teacher spectrum at init;
+                   2) eigentransfer — blend student singular vectors 75% toward
+                      teacher's, re-orthogonalize;
+                   3) mod wheel — after every optimizer step,
+                      W ← (1−s)·W + s·W_target, s=0.01 decaying ×0.9999/step.
+  not transferred: weights, activations, data, learned content.
+
+measured (nanoGPT Shakespeare-char, 10.65M params, 3 seeds, committed artifacts):
+  speed:        11.8× median steps-to-baseline-best (resolved); 7.0× with schedule
+                matched (only spectral flags differ) — attribution control.
+  overfitting:  recipe stable through 5,000 steps at both LRs tested; baseline
+                peaks ~step 1,350 then decays 1.78 → ~2.31 on all seeds.
+  structure:    early advantage (~23% lower loss @ step 100) flat across
+                teacher/student data overlap 1.0 → 0.0 (difficulty-controlled).
+  cross-domain: advantage persists (Δloss 0.591 → 0.627) when student trains AND
+                is evaluated on a different corpus (Sherlock Holmes, token-JS 0.027).
+  teacher lever: advantage monotonic in teacher training, saturating at ~2,000
+                steps (where the teacher itself converges; 4k/8k flat at Δ≈+0.46);
+                100-step teacher is WORSE than random init (Δ −0.069).
+  lever evals:  plain 75% full-direction blend beats grassmann pairing (which
+                eliminates the head start) and top-k=128 (uniformly ~0.05 worse)
+                at Sherlock-distance.
+
+bounds: transfer results are 100-step probes; far corpus is same-language prose;
+        no generic-regularization control yet; 10.65M params only.
+requires: a TRAINED teacher of the same architecture (dimension-specific directions).
+evidence: github.com/timepointai/nanogpt-prism-shakespeare → results/*.json
+          (loss curves, provenance, censoring flags; partial runs refuse to score).
+      </pre>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>PRISM · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare">nanogpt-prism-shakespeare</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/WHITEPAPER.md">whitepaper</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/RESULTS.md">results</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/tree/master/results">artifacts</a></div>
+    <div>A <a href="https://timepointai.com">Timepoint Labs</a> project by Sean McDonald · base model is <a href="https://github.com/karpathy/nanoGPT">nanoGPT</a> (Karpathy, MIT) · geometric-alignment levers contributed by Leonard Wang (PR #1)</div>
+    <div>house rule: a number on this page has a matching committed results/*.json — if it doesn't, it isn't a result.</div>
+  </div>
+</footer>
+
+</body>
+</html>

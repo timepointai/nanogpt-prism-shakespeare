@@ -5,7 +5,8 @@
 teacher and student share, including zero; it survives — slightly grows — when the
 student trains and is evaluated on a different corpus (Shakespeare teacher →
 Sherlock Holmes student); and it scales monotonically with teacher training,
-unsaturated at every size tested. Earlier versions: [`archive/v0.1/`](archive/v0.1/)
+saturating precisely where the teacher itself converges. Earlier versions:
+[`archive/v0.1/`](archive/v0.1/)
 (attribution — the matched-schedule control), [`archive/v0.0/`](archive/v0.0/)
 (before attribution).
 
@@ -206,10 +207,18 @@ One teacher size per arm, same-data, 300-step students
 | 250 | +0.088 |
 | 500 | +0.248 |
 | 1,000 | +0.377 |
-| 2,000 | +0.451 — unsaturated |
+| 2,000 | +0.451 |
+| 4,000 | +0.465 |
+| 8,000 | +0.456 |
 
-The advantage is monotonic in teacher training and had not saturated at the
-largest teacher tested. The negative cell is as informative as the trend: a
+(2k/4k/8k from the saturation run,
+[`recipe_20260721T172238Z.json`](results/recipe_20260721T172238Z.json), whose 2k
+anchor reproduces the sweep's +0.451 at +0.458.) The advantage is monotonic in
+teacher training and **saturates at ≈2,000 steps — right where the teacher's own
+training converges** (baseline best ~step 1,350). The lever tracks
+teacher-geometry convergence and plateaus with it, which is precisely the shape
+the spectral-transfer mechanism predicts: once the geometry stops changing, there
+is nothing more to transfer. The negative cell is as informative as the trend: a
 barely-trained teacher's geometry is noise imprinted with authority, and it
 actively hurts. This dependence on the *quality of the transferred geometry* is
 indirect evidence that the spectral target, not generic regularization pressure,
