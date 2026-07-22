@@ -88,6 +88,35 @@ learns the new domain (3 seeds, Shakespeare → Sherlock, 1,000 finetune steps):
 both. The anchored model still beats a from-scratch Sherlock model, so it genuinely
 learns the new domain — it isn't just refusing to move.)*
 
+### How it works
+
+Finetuning is just more gradient descent, now on new data — and that descent walks
+the weights away from the configuration that knew the old domain. **Forgetting is that
+drift.** So snapshot the trained weights **W₀** before you start, and after *every*
+optimizer step, nudge the live weights a little back toward that snapshot:
+
+```
+# after each optimizer step, for every weight matrix:
+W  ←  (1 − s)·W  +  s·W₀        # s = 0.01, constant (no decay)
+```
+
+Gradient descent still dominates each step, so the model keeps learning the new
+domain — but the nudge continuously pulls it back toward `W₀`, so it never drifts far
+from what it already knew. That's the whole method, and it's not a new mechanism: it's
+PRISM's **Mod Wheel**, unchanged, with its target set to the model's *own pre-finetune
+weights* instead of a fresh spectrally-shaped init. Two knobs matter:
+
+- **The pull is constant** (`s` fixed at ~0.01), where the from-scratch recipe *decays*
+  it. From scratch, the mod wheel is annealing a one-time reshape and should fade; in a
+  finetune there's no reshape to settle — you want the same gentle restoring force for
+  the whole run.
+- **`s` is the retention/plasticity dial.** Turn it up for more retention (less
+  forgetting, slightly slower to adapt), down for more plasticity. The frontier in
+  [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md) walks it 0.005 → 0.02.
+
+No teacher, no fingerprint, no extra storage — the anchor is the model's own starting
+point. `prism_finetune.py` ([below](#use-it)) does exactly this to any checkpoint.
+
 The attribution is the interesting part, and it lands on a **negative** to the
 obvious guess. The protection is **not** the spectral geometry — anchoring only the
 *spectrum* (freeing the directions) forgets as much as a plain finetune (1.07×), and
