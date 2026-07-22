@@ -1,7 +1,7 @@
 """
-prism_modal_finetune.py — isolated runner for the finetune-retention benchmark on
-the `prism-finetune-retention` branch. Uses a SEPARATE Modal Volume and app so it
-can't collide with the master `prism-eval` volume or Leo's `prism-eval-leo`.
+prism_modal_finetune.py — isolated runner for the finetune-retention benchmark
+(now on master). Uses a SEPARATE Modal Volume and app so its resume-state can't
+collide with the main `prism-eval` volume or Leo's `prism-eval-leo`.
 Fire-and-forget by default.
 
     modal run --detach prism_modal_finetune.py --extra "<prism_finetune_eval.py flags>"
@@ -23,7 +23,7 @@ vol = modal.Volume.from_name("prism-eval-finetune", create_if_missing=True)  # i
 WORK = "/work"
 REPO = f"{WORK}/nanogpt-prism"
 REPO_URL = "https://github.com/timepointai/nanogpt-prism-shakespeare.git"
-BRANCH = "prism-finetune-retention"
+BRANCH = "master"
 
 
 @app.function(image=image, gpu="L4", volumes={WORK: vol}, timeout=24 * 3600)
