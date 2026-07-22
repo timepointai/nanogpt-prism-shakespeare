@@ -20,6 +20,10 @@ reproducible from an artifact in [`results/`](results/). Earlier writeups:
 | I | **Teacher saturation**: teachers 2,000 / 4,000 / 8,000 — finds the plateau | [`recipe_20260721T172238Z.json`](results/recipe_20260721T172238Z.json) |
 | — | Sliding-window overlap sweep — **record only, interpretation retired** (difficulty confound; superseded by D) | [`recipe_20260721T022342Z.json`](results/recipe_20260721T022342Z.json) |
 | — | Far-corpus sweep scored on Shakespeare val — superseded by E (see scope note in [`results/README.md`](results/README.md)) | [`recipe_20260721T153218Z.json`](results/recipe_20260721T153218Z.json) |
+| J | **Finetune-retention frontier** (§7): 11 arms × 3 seeds — raw anchor vs. low-LR vs. spectral vs. shuffled | [`finetune_20260721T215319Z.json`](results/finetune_20260721T215319Z.json) |
+| K | Finetune-retention core pair (§7): plain vs. raw-0.01 anchor, 3 seeds — the 5.73× headline | [`finetune_20260721T201955Z.json`](results/finetune_20260721T201955Z.json) |
+| — | Finetune go/no-go probe (1 seed) — confirms plain finetuning forgets | [`finetune_20260721T200415Z.json`](results/finetune_20260721T200415Z.json) |
+| — | Finetune attribution probe (1 seed) — superseded by J | [`finetune_20260721T212408Z.json`](results/finetune_20260721T212408Z.json) |
 
 ## 1. Speed: ~12×, resolved (Run C)
 
@@ -153,6 +157,49 @@ because the plain recipe already transfers at full strength (Run E). The levers'
 real test is a corpus far enough that the plain recipe degrades (see next
 experiments).
 
+## 7. Finetuning without forgetting (Runs J, K)
+
+Runs A–H are all *from-scratch*. A separate study points the Mod Wheel the other
+way: kept on during a **finetune** and self-anchored to a trained model's own
+pre-finetune weights, does it prevent catastrophic forgetting? Setup: a plain
+Shakespeare base (2,000 steps, one per seed) finetuned 1,000 steps on Sherlock; each
+arm forks the same base and is scored every step on **both** Sherlock (adaptation)
+and Shakespeare (retention). The control and every anchor arm share the identical
+schedule — only the Mod Wheel differs.
+
+**The technique works: up to ~10× less forgetting** (Run J, 3-seed frontier,
+[`finetune_20260721T215319Z.json`](results/finetune_20260721T215319Z.json); base
+Shakespeare val 1.488, from-scratch Sherlock ceiling 1.493):
+
+| arm | forgetting (Shakespeare val climb) | Sherlock best | vs. plain |
+|---|---|---|---|
+| plain finetune | +0.428 | 1.252 | 1.0× |
+| raw anchor 0.02 | **+0.043** | 1.368 | **9.9×** |
+| raw anchor 0.01 | +0.067 | 1.337 | 6.6× |
+| raw anchor 0.005 | +0.090 | 1.307 | 4.8× |
+| low-LR 5e-5 | +0.227 | 1.297 | 1.9× |
+| low-LR 1e-4 | +0.282 | 1.277 | 1.5× |
+| spectral (spectrum only) | +0.399 | 1.254 | 1.07× |
+| shuffled (wrong spectrum) | +1.085 | 1.413 | 0.39× |
+
+Every anchor arm still beats the from-scratch Sherlock ceiling (1.493), so retention
+is never "it didn't learn Sherlock." Run K is the same-schedule core pair (plain vs.
+the raw-0.01 anchor) at the headline **5.73×**
+([`finetune_20260721T201955Z.json`](results/finetune_20260721T201955Z.json)).
+
+**The attribution is a negative on the obvious guess.** Anchoring only the
+*spectrum* (freeing the directions) does essentially nothing for retention (1.07×, ≈
+plain); a *wrong*-spectrum placebo actively harms (0.39×); and the raw anchor
+**Pareto-dominates** the low-LR frontier — at comparable adaptation it retains ~2×
+more (raw 0.090 @1.307 vs. low-LR 0.227 @1.297). The protection is a raw
+directional/whole-weight anchor (L2-to-init / EWC-lite), **not** the spectral
+geometry and **not** just a smaller learning rate.
+
+This separates PRISM's two regimes cleanly: **from scratch the *spectrum* carries
+transferable, data-independent structure (§3, §4); in finetuning the *directions*
+carry retained content and must be pinned.** Method, full frontier, and bounds:
+[`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
+
 ## What this does NOT establish
 
 - **Early-window scope.** Runs D and E measure the head start at step 100
@@ -166,6 +213,10 @@ experiments).
   suggestive, not a substitute.
 - **Two shared learning rates, not a per-arm-best sweep.**
 - **Scale.** 10.65M params, ~1M-token corpora.
+- **Finetune-retention (§7) shows old-domain *retention*, not new-domain overfit
+  prevention** (plain finetuning didn't itself overfit Sherlock in 1,000 steps), and
+  "far" is again Sherlock (same alphabet). The anchor also trades a little late
+  adaptation back for retention (a decaying pull would remove it).
 
 ## The next experiments, in order
 
@@ -195,6 +246,15 @@ python prism_eval.py --teacher_steps=500 --student_steps=100 --eval_every=10 \
   --baseline_warmup=20 --overlap=1.0,0.75,0.5,0.25,0.0 \
   --far_corpus=data/far.txt --far_val                                       # Run E
 python prism_eval.py --report                                               # reprint last artifact
+```
+
+The finetune-retention frontier (Runs J, K) runs headless on Modal:
+
+```bash
+modal run --detach prism_modal_finetune.py --extra \
+ "--tag=r2b --base_steps=2000 --ft_steps=1000 --eval_every=25 --seeds=1337,1338,1339 \
+  --arms=base,plain,raw_lo,raw_mid,raw_hi,lowlr_a,lowlr_b,lowlr_c,spectral,shuffled,scratch_ceiling \
+  --learning_rate=3e-4 --min_lr=3e-5 --batch_size=32 --block_size=256 --far_corpus=data/far.txt"
 ```
 
 The eval is stepwise and resumable, records provenance and whether the schedule

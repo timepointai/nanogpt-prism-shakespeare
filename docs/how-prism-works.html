@@ -615,10 +615,21 @@
        how the teacher was <em>shaped</em> — and that shape turns out to be most of what
        the first thousand steps of training laboriously rediscover, largely independent
        of the data used to discover it.</p>
+    <p style="max-width:70ch">And the same instrument works the other way: kept on while
+       you <em>finetune</em> a trained model — anchored to its own weights — it cuts
+       catastrophic forgetting up to ~10×. The twist is that that protection rides the
+       singular <em>directions</em>, not the spectrum — so the geometry splits in two:
+       the <strong>spectrum</strong> is transferable structure, the
+       <strong>directions</strong> are retained content. Structure transfers; content is
+       retained. <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/docs/FINETUNE-RETENTION.md">The other direction →</a></p>
     <details class="agent">
       <summary>machine-readable summary (for agents reviewing this page)</summary>
       <pre>
-method: Prism — from-scratch spectral transfer learning
+method: Prism — a trained model's geometry, used two ways: (1) TRANSFER it into a
+        fresh model (from-scratch spectral transfer), and (2) ANCHOR a trained model
+        with it during FINETUNING (finetune-retention). Sections below.
+
+(1) from-scratch spectral transfer learning
   extract (read):  per weight matrix W = U·Σ·Vᵀ; pool normalized singular-value
                    spectra per weight group {attention, ffn_up, ffn_down, embedding};
                    fit each pooled spectrum with 8 DCT coefficients via least squares
@@ -647,9 +658,27 @@ measured (nanoGPT Shakespeare-char, 10.65M params, 3 seeds, committed artifacts)
                 eliminates the head start) and top-k=128 (uniformly ~0.05 worse)
                 at Sherlock-distance.
 
+(2) finetune-retention (the other direction; docs/FINETUNE-RETENTION.md)
+  apply (write):  keep the mod wheel ON during a finetune (init_from=resume),
+                  self-anchored to the model's own pre-finetune weights, constant
+                  pull (prism_anchor_mode=raw, decay=1.0). Entry point:
+                  prism_finetune.py; benchmark: prism_finetune_eval.py.
+  measured (Shakespeare base → Sherlock finetune, 1000 steps, 3 seeds):
+    retention:    up to ~10× less catastrophic forgetting — plain forgets +0.428
+                  nats of the old domain, raw anchor(0.02) only +0.043; still beats
+                  the from-scratch new-domain ceiling (learns, not frozen).
+    attribution:  it is NOT the spectrum — anchoring spectrum-only (free directions)
+                  forgets like plain (1.07×); a wrong-spectrum placebo HARMS (0.39×);
+                  the raw whole-weight anchor Pareto-dominates the low-LR frontier
+                  (~2× more retention at equal adaptation). Protection is a raw
+                  DIRECTIONAL/weight anchor (L2-to-init / EWC-lite), not spectral.
+    the split:    spectrum = transferable STRUCTURE (regime 1); directions = retained
+                  CONTENT (regime 2). Structure transfers; content is retained.
+
 bounds: transfer results are 100-step probes; far corpus is same-language prose;
-        no generic-regularization control yet; 10.65M params only.
-requires: a TRAINED teacher of the same architecture (dimension-specific directions).
+        no generic-regularization control yet; 10.65M params only. Finetune-retention
+        shows old-domain RETENTION (not new-domain overfit prevention), far=Sherlock.
+requires: a TRAINED model of the same architecture (dimension-specific directions).
 evidence: github.com/timepointai/nanogpt-prism-shakespeare → results/*.json
           (loss curves, provenance, censoring flags; partial runs refuse to score).
       </pre>
@@ -659,7 +688,7 @@ evidence: github.com/timepointai/nanogpt-prism-shakespeare → results/*.json
 
 <footer>
   <div class="wrap">
-    <div>PRISM · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare">nanogpt-prism-shakespeare</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/WHITEPAPER.md">whitepaper</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/RESULTS.md">results</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/tree/master/results">artifacts</a></div>
+    <div>PRISM · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare">nanogpt-prism-shakespeare</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/WHITEPAPER.md">whitepaper</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/RESULTS.md">results</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/blob/master/docs/FINETUNE-RETENTION.md">finetuning</a> · <a href="https://github.com/timepointai/nanogpt-prism-shakespeare/tree/master/results">artifacts</a></div>
     <div>A <a href="https://timepointai.com">Timepoint Labs</a> project by Sean McDonald · base model is <a href="https://github.com/karpathy/nanoGPT">nanoGPT</a> (Karpathy, MIT) · geometric-alignment levers contributed by Leonard Wang (PR #1)</div>
     <div>house rule: a number on this page has a matching committed results/*.json — if it doesn't, it isn't a result.</div>
   </div>

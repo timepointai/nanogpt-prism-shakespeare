@@ -21,6 +21,12 @@ student trains and is evaluated on a different author entirely (Shakespeare teac
 advantage grows with teacher training and saturates right where the teacher itself
 converges (≈2,000 steps; 4k and 8k teachers add nothing).
 
+That is one of *two* things a trained model's geometry buys you. Point the same Mod
+Wheel the other way — to *hold* a trained model in place rather than seed a fresh one —
+and it lets you finetune onto a new domain with **up to ~10× less catastrophic
+forgetting** ([the other direction](#the-other-direction-finetuning-without-forgetting)).
+Structure transfers; content is retained.
+
 <img src="assets/prism-transfer.svg" alt="Left: validation loss at step 100 versus teacher/student data overlap, with the student scored on its own data mixture — the from-scratch baseline sits at ~2.47 while the Prism recipe sits at ~1.88, and the gap grows from 0.591 at full overlap to 0.627 when the student trains and is scored entirely on Sherlock Holmes. Right: the advantage versus teacher training steps — negative at a 100-step teacher, rising monotonically and saturating at a +0.46 plateau around 2,000 steps, where the teacher itself converges; 4k and 8k teachers are flat." width="100%">
 
 | The four measurements (all committed under [results/](results/)) | number | artifact |
@@ -64,9 +70,45 @@ at, and the teacher-strength sweep shows the effect tracks exactly that geometry
 quality — a barely-trained teacher's geometry actively *hurts* (Δloss −0.069),
 a well-trained one helps more the longer it trained.
 
+## The other direction: finetuning without forgetting
+
+Everything above hands a trained model's geometry to a *fresh* one. The same
+machinery, pointed the other way, solves a different problem: adapting a *trained*
+model to a new domain **without wrecking what it already knew** (catastrophic
+forgetting). Keep the Mod Wheel on during the finetune, self-anchored to the model's
+own pre-finetune weights, and it cuts forgetting by **up to ~10×** while it still
+learns the new domain (3 seeds, Shakespeare → Sherlock, 1,000 finetune steps):
+
+| finetune arm | forgets Shakespeare | learns Sherlock | vs. plain |
+|---|---|---|---|
+| plain finetune | +0.43 | 1.25 | 1× |
+| **Mod Wheel anchor (strength 0.02)** | **+0.04** | 1.37 | **~10× less forgetting** |
+
+*(forgetting = old-domain val-loss climb from the base, in nats; lower is better on
+both. The anchored model still beats a from-scratch Sherlock model, so it genuinely
+learns the new domain — it isn't just refusing to move.)*
+
+The attribution is the interesting part, and it lands on a **negative** to the
+obvious guess. The protection is **not** the spectral geometry — anchoring only the
+*spectrum* (freeing the directions) forgets as much as a plain finetune (1.07×), and
+a *wrong*-spectrum placebo actively harms (0.39×). And it is **not** just a smaller
+learning rate — the anchor Pareto-dominates the low-LR frontier (~2× more retention
+at equal adaptation). What does it is a raw **directional / whole-weight** anchor.
+
+That splits PRISM's geometry cleanly in two, and the halves are complementary:
+
+- **Spectrum → structure.** Data-*independent*; *transfer* it into fresh models —
+  which is why the head start ports even to Sherlock.
+- **Directions → content.** Domain-*specific*; *pin* them to finetune without
+  forgetting.
+
+**Structure transfers; content must be retained.** Full study, 3-seed frontier, and
+honest bounds: [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
+
 ## Use it
 
-`prism_accelerate.py` applies the proven recipe to any nanoGPT checkpoint:
+Two entry points — one per direction. **Transfer** into a fresh model with
+`prism_accelerate.py`:
 
 ```bash
 cd src
@@ -87,14 +129,21 @@ initialized and regularized by it. Everything after `--` passes through to
 - Teacher and student must share the same architecture — the directional transfer
   is dimension-specific. Cross-size transfer is future work.
 
-**Finetuning without forgetting.** The same Mod Wheel, kept on during a *finetune* and
-self-anchored to a model's own pre-finetune weights, cuts catastrophic forgetting up to
-~10× while it learns a new domain — `prism_finetune.py` applies it to any checkpoint. The
-attribution is the interesting part: the protection is a *raw* directional/weight anchor
-(not the spectrum, and not just a smaller learning rate), which separates PRISM's two
-regimes — the **spectrum** carries transferable structure (from scratch), the
-**directions** carry retained content (finetuning). Full study, 3-seed frontier, and
-honest bounds: [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
+**Finetune** a trained model without forgetting with `prism_finetune.py`:
+
+```bash
+cd src
+python prism_finetune.py \
+    --base_ckpt path/to/trained/ckpt.pt \
+    --new_data your_new_dataset --retain_val your_old_dataset \
+    --out_dir out-finetuned --mod 0.01 --ft_steps 1000
+# add --plain to run the same finetune with the anchor off, for comparison
+```
+
+It forks the checkpoint and finetunes it with the Mod Wheel self-anchored (constant
+pull). `--retain_val` scores the *old* domain alongside the new one, so you can see
+the forgetting the anchor is preventing. `--mod` is the retention/plasticity dial
+(higher = more retention, less adaptation).
 
 ## Start here (humans and agents)
 
@@ -223,6 +272,19 @@ The cross-domain arm reproduces with
 `--overlap=1.0,0.75,0.5,0.25,0.0 --far_corpus=data/far.txt --far_val` (plus the
 probe schedule above).
 
+**The finetune-retention frontier (Modal):**
+
+```bash
+modal run --detach prism_modal_finetune.py --extra \
+ "--tag=r2b --base_steps=2000 --ft_steps=1000 --eval_every=25 --seeds=1337,1338,1339 \
+  --arms=base,plain,raw_lo,raw_mid,raw_hi,lowlr_a,lowlr_b,lowlr_c,spectral,shuffled,scratch_ceiling \
+  --learning_rate=3e-4 --min_lr=3e-5 --batch_size=32 --block_size=256 --far_corpus=data/far.txt"
+```
+
+`prism_finetune_eval.py` trains one base per seed, forks it into each arm, and scores
+adaptation (new domain) and retention (old domain) every step. See
+[`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md) for the full frontier.
+
 ## What's next
 
 1. **A truly far modality.** Sherlock is still English prose. Point the far-corpus
@@ -238,6 +300,10 @@ probe schedule above).
 5. **Cross-size transfer** — the spectrum interpolates trivially; the directions
    need a projection scheme. The most differentiated payoff: weight-copying can't
    change architecture, geometry might.
+6. **Finetune-retention, further** — a truly-far new domain (code) where the
+   directions may diverge more; a decaying pull to remove the anchor's late
+   adaptation give-back; and the new-domain-overfit case the current frontier didn't
+   exercise. See [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
 
 Geometric-alignment refinements contributed by Leonard Wang (PR #1, now merged)
 are available as opt-in flags — Grassmann geodesic direction pairing
