@@ -15,3 +15,5 @@ MARKETING_PLAN.md
 .prism_cache/
 .prism_runs/
 out-eval-*/
+out-ft-*/
+out-finetuned/

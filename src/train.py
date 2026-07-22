@@ -19,6 +19,7 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 import os
 import time
 import math
+import json
 import pickle
 from contextlib import nullcontext
 
@@ -28,6 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
+from prism_init import spectral_target as _spectral_target
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -65,6 +67,15 @@ prism_mod_sustain = 0.0 # sustain phase strength (0 = use single-phase mod)
 prism_mod_sustain_decay = 0.9999 # sustain phase decay
 prism_mod_transition = 0 # step to switch from attack to sustain (0 = single phase)
 prism_unfold = 0 # re-extract spectral targets every N steps (0 = fixed targets)
+# prism finetune self-anchor mode (RESUME path only) — what the mod wheel pulls toward:
+#   'raw'      the resumed base weights themselves (soft L2-to-init / EWC-lite)
+#   'spectral' the base's singular-value SPECTRUM imposed on the CURRENT directions,
+#              rebuilt every prism_anchor_refresh steps — holds the spectral shape,
+#              frees U/V to adapt. The attribution test for PRISM's geometry thesis.
+#   'shuffled' same as spectral but with the base spectrum permuted (placebo: same
+#              spectral pressure, wrong spectrum-to-direction assignment)
+prism_anchor_mode = 'raw'
+prism_anchor_refresh = 25 # spectral/shuffled: rebuild the target every N steps
 # prism direction-transfer knobs (opt-in; defaults reproduce the recipe exactly)
 prism_align_spec = '' # per-group alignment, e.g. 'attention:0.9,ffn_down:0.5'
 prism_align_mode = 'linear' # 'linear' | 'grassmann' | 'subspace'
@@ -76,6 +87,10 @@ prism_cka = 0.0 # weight on the (1 - CKA) representational-distance loss (0 = of
 prism_cka_teacher = '' # path to a teacher ckpt.pt whose block activations to match
 prism_cka_layers = '' # comma block indices to match (empty = all blocks)
 prism_cka_samples = 2048 # max token rows subsampled per layer for the CKA estimate
+# finetune dual-val: a second held-out val set scored alongside val (retention).
+# Empty = single-val (unchanged). Used by the finetune benchmark to watch the
+# OLD domain's loss (forgetting) while training on the NEW domain.
+val2_dir = '' # path to a dataset dir containing val.bin (same vocab/meta as the model)
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -141,6 +156,9 @@ def get_batch(split):
     # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
     if split == 'train':
         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
+    elif split == 'val2':
+        # retention val: a held-out set from a DIFFERENT dataset dir (the old domain)
+        data = np.memmap(os.path.join(val2_dir, 'val.bin'), dtype=np.uint16, mode='r')
     else:
         data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
     ix = torch.randint(len(data) - block_size, (batch_size,))
@@ -237,6 +255,38 @@ if prism_init and init_from == 'scratch':
         print(f"[prism] Captured {len(prism_targets)} spectral targets for modulation "
               f"(strength={prism_mod}, decay={prism_mod_decay})")
 
+# Prism self-anchor on RESUME — engage the mod wheel during FINETUNING. The scratch
+# path above captures targets from a fresh Prism-shaped model; here we instead
+# capture them from the RESUMED (already-trained) weights, so the mod wheel holds
+# the model in its own converged geometry while it learns new data. This tests
+# whether the no-drift property that prevents overfitting from scratch also
+# prevents catastrophic forgetting during finetuning. Use prism_mod_decay=1.0 for
+# a constant pull (the scratch decay anneals a reshape that isn't happening here).
+elif prism_mod > 0 and init_from == 'resume':
+    if prism_anchor_mode == 'raw':
+        prism_targets = {name: param.data.clone().cpu()
+                         for name, param in model.named_parameters()
+                         if param.dim() >= 2}
+    else:
+        # spectral / shuffled: store the base spectrum per weight; the initial target
+        # imposes it on the base's OWN directions (== base weight for 'spectral'; a
+        # permuted-spectrum placebo for 'shuffled'). Refreshed during training below.
+        prism_base_sv = {}
+        prism_targets = {}
+        _g = torch.Generator().manual_seed(seed)
+        for name, param in model.named_parameters():
+            if param.dim() < 2:
+                continue
+            U, s, Vt = torch.linalg.svd(param.data.float(), full_matrices=False)
+            sv0 = s.clone()
+            if prism_anchor_mode == 'shuffled':
+                sv0 = sv0[torch.randperm(sv0.shape[0], generator=_g)]
+            prism_base_sv[name] = sv0.cpu()
+            prism_targets[name] = ((U * sv0) @ Vt).to(param.dtype).cpu()
+    print(f"[prism] Self-anchored {len(prism_targets)} targets from resumed ckpt "
+          f"(mode={prism_anchor_mode}, strength={prism_mod}, decay={prism_mod_decay}"
+          + (f", refresh={prism_anchor_refresh}" if prism_anchor_mode != 'raw' else '') + ')')
+
 # Prism CKA representational regularizer (opt-in) — pull student block activations
 # toward a frozen teacher's. Set up before compile so hooks fire on the raw model.
 cka_matcher = None
@@ -273,7 +323,7 @@ if ddp:
 def estimate_loss():
     out = {}
     model.eval()
-    for split in ['train', 'val']:
+    for split in (['train', 'val', 'val2'] if val2_dir else ['train', 'val']):
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
@@ -319,7 +369,10 @@ while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
-        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        line = f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
+        if val2_dir:
+            line += f", val2 loss {losses['val2']:.4f}"
+        print(line)
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -403,6 +456,19 @@ while True:
                              if param.dim() >= 2}
         if master_process:
             print(f"[prism] Unfolded: re-extracted {len(prism_targets)} spectral targets at step {iter_num}")
+
+    # spectral-anchor refresh — rebuild each target as (current directions × base
+    # spectrum), so the finetune's U/V stay free while the spectral shape is held to
+    # the base's. This is what makes 'spectral' differ from the 'raw' fixed-weight pull.
+    if (prism_anchor_mode in ('spectral', 'shuffled') and 'prism_base_sv' in dir()
+            and prism_anchor_refresh > 0 and iter_num > 0
+            and iter_num % prism_anchor_refresh == 0):
+        raw_model = model.module if ddp else model
+        with torch.no_grad():
+            for name, param in raw_model.named_parameters():
+                if name in prism_base_sv:
+                    prism_targets[name] = _spectral_target(
+                        param.data, prism_base_sv[name].to(param.device)).cpu()
 
     # timing and logging
     t1 = time.time()

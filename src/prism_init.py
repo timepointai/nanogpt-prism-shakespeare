@@ -40,6 +40,21 @@ def dct_expand(coeffs, n):
     return spectrum
 
 
+def spectral_target(W, sv0):
+    """Impose the singular-value spectrum sv0 on W's CURRENT directions: U diag(sv0) Vt.
+
+    The 'spectral' finetune anchor (train.py, resume path) rebuilds its mod-wheel
+    target this way from the live weight each refresh: it holds the weight's spectral
+    shape near sv0 while leaving U/V free to adapt to new data — so the mod wheel
+    constrains the spectrum (the PRISM geometry) rather than pinning the whole weight
+    (which is what the 'raw' L2-to-init anchor does). Column space is preserved."""
+    U, s, Vt = torch.linalg.svd(W.float(), full_matrices=False)
+    k = min(sv0.shape[0], s.shape[0])
+    s_new = s.clone()
+    s_new[:k] = sv0[:k].to(s.device, s.dtype)
+    return ((U * s_new) @ Vt).to(W.dtype)
+
+
 def blend_orthogonal(A, B, alpha):
     """Blend two orthogonal matrices, re-orthogonalized via SVD.
 
