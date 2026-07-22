@@ -87,6 +87,15 @@ initialized and regularized by it. Everything after `--` passes through to
 - Teacher and student must share the same architecture — the directional transfer
   is dimension-specific. Cross-size transfer is future work.
 
+**Finetuning without forgetting.** The same Mod Wheel, kept on during a *finetune* and
+self-anchored to a model's own pre-finetune weights, cuts catastrophic forgetting up to
+~10× while it learns a new domain — `prism_finetune.py` applies it to any checkpoint. The
+attribution is the interesting part: the protection is a *raw* directional/weight anchor
+(not the spectrum, and not just a smaller learning rate), which separates PRISM's two
+regimes — the **spectrum** carries transferable structure (from scratch), the
+**directions** carry retained content (finetuning). Full study, 3-seed frontier, and
+honest bounds: [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
+
 ## Start here (humans and agents)
 
 Everything needed to verify or extend the results, in order:
@@ -247,6 +256,7 @@ truly-far modality above, where the plain recipe may finally need the help.
 ```
 README.md                  ← you are here (v0.2)
 docs/how-prism-works.html  ← the visual explainer (standalone, self-contained)
+docs/FINETUNE-RETENTION.md ← finetune without forgetting — the study + frontier
 WHITEPAPER.md              ← method + experiments in full
 RESULTS.md                 ← the committed runs and what they do / don't show
 results/                   ← eval artifacts. the evidence.
@@ -254,11 +264,14 @@ archive/v0.1/              ← the attribution pass (matched-LR control)
 archive/v0.0/              ← the earliest pass, before attribution
 prism_modal.py             ← headless Modal runner (used for the committed runs)
 prism_modal_leo.py         ← isolated runner for the leo-test branch
+prism_modal_finetune.py    ← isolated runner for the finetune-retention benchmark
 src/prism_eval.py          ← the benchmark (schedule/overlap/teacher-sweep knobs)
+src/prism_finetune_eval.py ← the finetune-retention benchmark (anchor frontier)
 src/prism_accelerate.py    ← apply Prism to any checkpoint (the "use it" entry point)
-src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel
+src/prism_finetune.py      ← finetune any checkpoint without forgetting (the technique)
+src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel + spectral_target
 src/prism_extract.py       ← extract a fingerprint from any checkpoint
-src/prism_selftest.py      ← 25 offline invariant tests for the transfer levers
+src/prism_selftest.py      ← 30 offline invariant tests (transfer levers + finetune anchor)
 data/far.txt               ← Sherlock Holmes (Project Gutenberg #1661, public
                              domain, boilerplate stripped) — the far corpus
 ```
