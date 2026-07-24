@@ -94,6 +94,10 @@ def train_base(method, seed, a, device, run_dir):
                 f'--prism_directions={cache}/directions.pt',
                 '--prism_mod=0.01', '--prism_mod_decay=0.9999',
                 f'--learning_rate={a.prism_lr}', f'--warmup_iters={a.prism_warmup}']
+    elif method == 'plain_fastlr':
+        # attribution control: plain (NO spectral) but at PRISM's schedule (LR/warmup),
+        # so prism-vs-plain_fastlr isolates the spectral geometry from the schedule.
+        cmd += [f'--learning_rate={a.prism_lr}', f'--warmup_iters={a.prism_warmup}']
     # plain uses the config schedule (LR 1e-3, warmup 100); no prism flags.
 
     log(f'Training {method} base (seed {seed}) → val target {a.base_target_val}…', 2)
@@ -223,11 +227,8 @@ def main():
     methods = [m for m in a.base_methods.split(',') if m.strip()]
     device = a.device or default_device()
 
-    # A base stops at a multiple of base_eval_every; the finetune must eval exactly at
-    # that step (retention_at_base), so eval_every must divide base_eval_every.
-    if a.base_eval_every % a.eval_every != 0:
-        sys.exit(f'--eval_every ({a.eval_every}) must divide --base_eval_every '
-                 f'({a.base_eval_every}) so the finetune evals at the base stop step.')
+    # (train.py now forces an eval at the resume step, so retention_at_base is always
+    # captured — the finetune eval cadence no longer has to divide base_eval_every.)
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
     key = run_key(a)

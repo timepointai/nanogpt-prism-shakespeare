@@ -370,8 +370,11 @@ while True:
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-    # evaluate the loss on train/val sets and write checkpoints
-    if iter_num % eval_interval == 0 and master_process:
+    # evaluate the loss on train/val sets and write checkpoints. Also force an eval on
+    # the first step (captures retention_at_base when resuming a finetune) and the last
+    # step, so the eval cadence can be decoupled from the (arbitrary) resume/stop step.
+    if (iter_num % eval_interval == 0 or local_iter_num == 0
+            or iter_num == max_iters) and master_process:
         losses = estimate_loss()
         line = f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
         if val2_dir:
