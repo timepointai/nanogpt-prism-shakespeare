@@ -38,15 +38,19 @@ ARMS = {  # name: (use_prism, use_prior)
 }
 
 
-def build_prior(context, out):
+def build_prior(context, lambdas, out_base):
+    tag = 'default' if not lambdas else 'l' + lambdas.replace('.', '').replace(',', '_')
+    out = f'{out_base}/{tag}'
     tab = f'{out}/prior_c{context}.pt'
     if os.path.exists(tab):
-        log(f'[resume] n-gram prior context {context} cached.', 2)
+        log(f'[resume] n-gram prior context {context} ({tag}) cached.', 2)
         return tab
-    log(f'Building n-gram prior (context {context}) on shakespeare_char…', 2)
-    r = subprocess.run([sys.executable, 'build_ngram_prior.py', '--dataset=shakespeare_char',
-                        f'--context={context}', f'--out={out}'],
-                       capture_output=True, text=True, timeout=600)
+    log(f'Building n-gram prior (context {context}, lambdas {lambdas or "default"})…', 2)
+    cmd = [sys.executable, 'build_ngram_prior.py', '--dataset=shakespeare_char',
+           f'--context={context}', f'--out={out}']
+    if lambdas:
+        cmd.append(f'--lambdas={lambdas}')
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:
         raise RuntimeError(f'build_ngram_prior failed:\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}')
     for line in r.stdout.splitlines():
@@ -97,6 +101,8 @@ def run_arm(name, seed, a, device, run_dir, prior_tab, teacher_cache):
         extra += ['--prism_init=False']
     if use_prior:
         extra += [f'--prior_table={prior_tab}', f'--prior_strength={a.prior_strength}']
+        if a.gate_warmup > 0:
+            extra += [f'--logit_gate_warmup={a.gate_warmup}']
 
     r = run_training(name, extra, seed, a.student_steps, a.eval_every, a.eval_iters,
                      device, f's{seed}', batch_size=a.batch_size)
@@ -109,7 +115,7 @@ def run_arm(name, seed, a, device, run_dir, prior_tab, teacher_cache):
 
 def run_key(a):
     seeds = '-'.join(str(s) for s in a.seeds)
-    return (f"prior_c{a.context}_str{a.prior_strength}_s{a.student_steps}"
+    return (f"prior_c{a.context}_str{a.prior_strength}_g{a.gate_warmup}_s{a.student_steps}"
             f"_e{a.eval_every}_bs{a.batch_size}_seeds{seeds}"
             + (f"_{a.tag}" if a.tag else ''))
 
@@ -118,6 +124,11 @@ def main():
     p = argparse.ArgumentParser(description='Prior-Fused PRISM (T9 × PRISM)')
     p.add_argument('--context', type=int, default=3)
     p.add_argument('--prior_strength', type=str, default='1.0')
+    p.add_argument('--prior_lambdas', default='',
+                   help='interpolation weights orders 0..C (e.g. 0.0,0.03,0.12,0.85 = strong)')
+    p.add_argument('--gate_warmup', type=int, default=0,
+                   help='ramp the model logit contribution 0→1 over N steps (prior arms) so '
+                        'the fused init = the pure prior; 0 = off')
     p.add_argument('--teacher_steps', type=int, default=2000)
     p.add_argument('--student_steps', type=int, default=1500)
     p.add_argument('--eval_every', type=int, default=25)
@@ -151,7 +162,7 @@ def main():
     log(f'Run key: {key} | seeds {a.seeds} | arms {arms} | device {device}', 2)
 
     setup(overlap=None)                          # prepares shakespeare_char
-    prior_tab = build_prior(a.context, '.prism_cache/ngram')
+    prior_tab = build_prior(a.context, a.prior_lambdas, '.prism_cache/ngram')
     lock = acquire_lock(run_dir)
     try:
         per_seed = []

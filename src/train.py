@@ -103,6 +103,11 @@ stop_val_target = 0.0
 # (byte-identical to a plain run).
 prior_table = ''
 prior_strength = 0.0
+# logit gate: scale the MODEL's logit contribution by min(1, iter/warmup) so it ramps
+# from 0 → 1. At init the fused output is the PURE prior (no random-logit noise), so a
+# prior that already matches the baseline puts the model at baseline quality before any
+# training. 0 = no gate (model contributes fully from step 0).
+logit_gate_warmup = 0
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -334,6 +339,7 @@ if ddp:
 # gathered per position by context index. prior_strength=0 → disabled (plain loss path).
 _prior_logtab = None
 _prior_C = 0
+_cur_gate = 1.0                 # model-logit gate (ramped in the loop if logit_gate_warmup>0)
 if prior_table and prior_strength > 0:
     _pp = torch.load(prior_table, map_location=device, weights_only=False)
     _prior_logtab = _pp['table'].to(device)               # (V^C, V) log-probs
@@ -366,7 +372,7 @@ def _loss(logits, X, Y, model_loss):
     """Fused cross-entropy when a prior is active, else the model's own loss."""
     if _prior_logtab is None:
         return model_loss
-    fused = logits + prior_strength * _prior_logp(X)
+    fused = _cur_gate * logits + prior_strength * _prior_logp(X)
     return F.cross_entropy(fused.view(-1, fused.size(-1)), Y.view(-1), ignore_index=-1)
 
 
@@ -417,6 +423,11 @@ while True:
     lr = get_lr(iter_num) if decay_lr else learning_rate
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+    # logit gate: ramp the model's contribution 0 → 1 (updated before the eval below, so
+    # the step-0 eval reflects the pure prior). Only meaningful when a prior is fused.
+    if logit_gate_warmup > 0:
+        _cur_gate = min(1.0, iter_num / logit_gate_warmup)
 
     # evaluate the loss on train/val sets and write checkpoints. Also force an eval on
     # the first step (captures retention_at_base when resuming a finetune) and the last
