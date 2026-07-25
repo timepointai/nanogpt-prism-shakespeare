@@ -91,6 +91,10 @@ prism_cka_samples = 2048 # max token rows subsampled per layer for the CKA estim
 # Empty = single-val (unchanged). Used by the finetune benchmark to watch the
 # OLD domain's loss (forgetting) while training on the NEW domain.
 val2_dir = '' # path to a dataset dir containing val.bin (same vocab/meta as the model)
+# matched-quality early stop: stop training the moment val loss reaches this target
+# (0 = off). Lets bases trained by different methods (plain vs Prism) be compared at
+# EQUAL old-domain quality — the control for the arc / base-interaction study.
+stop_val_target = 0.0
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -366,8 +370,11 @@ while True:
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-    # evaluate the loss on train/val sets and write checkpoints
-    if iter_num % eval_interval == 0 and master_process:
+    # evaluate the loss on train/val sets and write checkpoints. Also force an eval on
+    # the first step (captures retention_at_base when resuming a finetune) and the last
+    # step, so the eval cadence can be decoupled from the (arbitrary) resume/stop step.
+    if (iter_num % eval_interval == 0 or local_iter_num == 0
+            or iter_num == max_iters) and master_process:
         losses = estimate_loss()
         line = f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}"
         if val2_dir:
@@ -394,6 +401,17 @@ while True:
                 }
                 print(f"saving checkpoint to {out_dir}")
                 torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+        # matched-quality early stop: bank the checkpoint the moment val reaches the
+        # target and stop, so bases trained by different methods can be compared at
+        # equal old-domain quality (the arc / base-interaction control).
+        if stop_val_target > 0 and losses['val'] <= stop_val_target and iter_num > 0:
+            ckpt = {'model': raw_model.state_dict(), 'optimizer': optimizer.state_dict(),
+                    'model_args': model_args, 'iter_num': iter_num,
+                    'best_val_loss': float(min(best_val_loss, losses['val'])), 'config': config}
+            torch.save(ckpt, os.path.join(out_dir, 'ckpt.pt'))
+            print(f"[stop_val_target] val {losses['val']:.4f} <= {stop_val_target} "
+                  f"at step {iter_num} — stopping")
+            break
     if iter_num == 0 and eval_only:
         break
 

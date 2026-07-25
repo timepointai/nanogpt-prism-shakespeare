@@ -200,6 +200,26 @@ transferable, data-independent structure (§3, §4); in finetuning the *directio
 carry retained content and must be pinned.** Method, full frontier, and bounds:
 [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
 
+## 8. The arc: PRISM pretraining + finetuning compound (Runs L, M)
+
+Does combining the two directions buy anything? The test: a PRISM-pretrained base vs.
+a plain base as the thing you finetune-anchor, at **matched** Shakespeare quality
+(`train.py --stop_val_target`). 3 seeds, all bases matched at ~1.79, finetuned on
+Sherlock with the *identical* raw anchor. Medians:
+
+| base (matched ~1.79) | forgets Shakespeare | learns Sherlock | run |
+|---|---|---|---|
+| plain (LR 1e-3) | +0.050 | 1.572 | [`…T172023Z`](results/arc_20260724T172023Z.json) (L) |
+| plain_fastlr (LR 5e-4, no spectral) | +0.084 | 1.571 | [`…T210817Z`](results/arc_20260724T210817Z.json) (M) |
+| **prism** (spectral) | **−0.001** | **1.438** | (L, M) |
+
+**A PRISM base finetunes with ≈ zero forgetting** (vs +0.05 for plain) **and adapts
+~8% better**, at matched quality. And it's the **spectral geometry**: the
+`plain_fastlr` control (plain at PRISM's learning rate, no spectral) forgets *more*
+than plain and adapts identically — so the schedule doesn't do it, only the spectral
+machinery does. Pretraining and finetuning with PRISM reinforce each other. Full study
+and bounds: [`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md).
+
 ## What this does NOT establish
 
 - **Early-window scope.** Runs D and E measure the head start at step 100

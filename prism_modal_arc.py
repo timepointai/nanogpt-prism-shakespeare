@@ -1,0 +1,69 @@
+"""
+prism_modal_arc.py — isolated runner for the PRISM×finetune arc (base-interaction)
+study on the `prism-unified-arc` branch. Separate Modal Volume + app so its
+resume-state can't collide with the main `prism-eval` or `prism-eval-finetune`
+volumes. Fire-and-forget by default.
+
+    modal run --detach prism_modal_arc.py --extra "<prism_arc_eval.py flags>"
+
+Fetch the artifact when done, and COMMIT it:
+    modal volume get prism-eval-arc nanogpt-prism/results/arc_latest.json ./results/
+"""
+import modal
+
+app = modal.App("prism-eval-arc")
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
+    .pip_install("torch", "numpy", "transformers", "tiktoken", "datasets")
+)
+
+vol = modal.Volume.from_name("prism-eval-arc", create_if_missing=True)  # isolated
+WORK = "/work"
+REPO = f"{WORK}/nanogpt-prism"
+REPO_URL = "https://github.com/timepointai/nanogpt-prism-shakespeare.git"
+BRANCH = "prism-unified-arc"
+
+
+@app.function(image=image, gpu="L4", volumes={WORK: vol}, timeout=24 * 3600)
+def run_eval(extra: str = ""):
+    import os
+    import subprocess
+    import sys
+    import time
+
+    vol.reload()
+    if not os.path.exists(REPO):
+        subprocess.run(["git", "clone", "-b", BRANCH, REPO_URL, REPO], check=True)
+    else:
+        subprocess.run(["git", "-C", REPO, "fetch", "origin", "--quiet"], check=False)
+        subprocess.run(["git", "-C", REPO, "reset", "--hard", f"origin/{BRANCH}"],
+                       check=False)
+    print(f"on branch {BRANCH}:",
+          subprocess.run(["git", "-C", REPO, "rev-parse", "--short", "HEAD"],
+                         capture_output=True, text=True).stdout.strip(), flush=True)
+    vol.commit()
+
+    cmd = [sys.executable, "-u", "prism_arc_eval.py"] + (extra.split() if extra else [])
+    proc = subprocess.Popen(cmd, cwd=f"{REPO}/src", stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+    last = time.time()
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        if time.time() - last > 60:
+            vol.commit(); last = time.time()
+    rc = proc.wait()
+    vol.commit()
+    if rc != 0:
+        raise RuntimeError(f"prism_arc_eval.py exited {rc}. Resume state on the Volume "
+                           f"— re-run to continue.")
+
+
+@app.local_entrypoint()
+def main(gpu: str = "L4", extra: str = ""):
+    call = run_eval.with_options(gpu=gpu).spawn(extra=extra)
+    print(f"\nLaunched arc base-interaction run (detached). call id: {call.object_id}")
+    print("Watch: modal app list  →  modal app logs <ap-id>")
+    print("Fetch when done: modal volume get prism-eval-arc "
+          "nanogpt-prism/results/arc_latest.json ./results/")

@@ -675,6 +675,13 @@ measured (nanoGPT Shakespeare-char, 10.65M params, 3 seeds, committed artifacts)
     the split:    spectrum = transferable STRUCTURE (regime 1); directions = retained
                   CONTENT (regime 2). Structure transfers; content is retained.
 
+(3) the arc — regimes 1 and 2 COMPOUND (docs/UNIFIED-ARC.md)
+  measured (3 seeds, matched Shakespeare val ~1.79, prism-vs-plain base, same anchor):
+    a PRISM-PRETRAINED base finetunes with ~ZERO forgetting (vs +0.05 for a plain base)
+    and adapts ~8% better — and a schedule-matched plain control (plain at prism's LR,
+    no spectral) forgets MORE, so it is the SPECTRAL GEOMETRY, not the learning rate. A
+    spectrally-healthy base is a better anchor; PRISM pretraining + finetuning reinforce.
+
 bounds: transfer results are 100-step probes; far corpus is same-language prose;
         no generic-regularization control yet; 10.65M params only. Finetune-retention
         shows old-domain RETENTION (not new-domain overfit prevention), far=Sherlock.
