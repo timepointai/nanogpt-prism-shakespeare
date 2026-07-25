@@ -220,6 +220,33 @@ than plain and adapts identically — so the schedule doesn't do it, only the sp
 machinery does. Pretraining and finetuning with PRISM reinforce each other. Full study
 and bounds: [`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md).
 
+## 9. Prior-Fused PRISM: a T9-style statistical prior compounds (Run N)
+
+Structure comes in more than one flavour. Fuse a fixed shared **n-gram prior** into the
+logits (product of experts, `final = model_logits + λ·log p_ngram(next | last C chars)`),
+so the model learns only the residual, and stack it with PRISM's spectral init. A startling
+input: a context-3 char n-gram already predicts Shakespeare val at **2.5722 bits/char** ≈
+the neural baseline's 2.565 best. 1 seed, steps-to-baseline-best
+([`…T011443Z`](results/prior_20260725T011443Z.json)):
+
+| arm | init (bits/ch) | best (bits/ch) | speedup |
+|---|---|---|---|
+| baseline | 6.18 | 2.565 | 1.0× |
+| prism | 4.47 | 2.245 | 15× |
+| prior (n-gram only) | 2.70 | 2.504 | 3.8× |
+| **prism_prior** | 2.68 | **2.235** | **30×** |
+
+**The hybrid doubles PRISM (15× → 30×) and reaches the best loss of all four** — below
+baseline, PRISM-alone, and the n-gram floor (2.50). The T9 statistical prior and PRISM's
+geometry compound: the prior pre-loads local structure for free, PRISM pre-loads the
+representational geometry, and PRISM's geometry is what breaks the residual below the
+n-gram floor. The "30×" is the compounding of two free priors (the fused arms start near
+baseline), not PRISM training 30× faster alone — the defensible claim is that the hybrid
+beats PRISM alone *and* reaches a better loss. The literal 1000× (reach baseline *at
+init*) is a knife-edge here — context-3 tops out *at* baseline, and a logit-gate meant to
+enable it backfired ([`…T013656Z`](results/prior_20260725T013656Z.json)); a clean version
+needs a context-4+ prior. Full study: [`docs/PRIOR-FUSED-PRISM.md`](docs/PRIOR-FUSED-PRISM.md).
+
 ## What this does NOT establish
 
 - **Early-window scope.** Runs D and E measure the head start at step 100

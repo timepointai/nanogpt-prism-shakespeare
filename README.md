@@ -144,6 +144,19 @@ geometry**, not the learning rate. A spectrally-healthy base is a dramatically b
 anchor; pretraining and finetuning with PRISM genuinely reinforce each other. Full study:
 [`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md).
 
+### …and they compound with a T9-style statistical prior
+
+Structure comes in more than one flavour, and they stack. Fuse a tiny fixed **shared
+n-gram prior** into the logits as a product of experts — `final = model_logits + λ·log
+p_ngram(next | last chars)`, so the model learns only the *residual* — and it compounds
+with PRISM's *geometric* prior. (Startling input: a context-3 char n-gram already predicts
+Shakespeare val at 2.57 bits/char ≈ the converged baseline.) Measured as steps-to-baseline
+quality: PRISM alone 15×, the n-gram prior alone 3.8×, and **the hybrid 30× — double PRISM
+— while reaching the *best* loss of all** (below baseline, PRISM-alone, and the n-gram
+floor: PRISM's geometry breaks the residual below what the prior can reach). Statistics
+from T9, geometry from PRISM, and they add up. Full study, honest bounds, and the path to
+a reach-at-init moonshot: [`docs/PRIOR-FUSED-PRISM.md`](docs/PRIOR-FUSED-PRISM.md).
+
 ## Use it
 
 Two entry points — one per direction. **Transfer** into a fresh model with
@@ -349,6 +362,10 @@ adaptation (new domain) and retention (old domain) every step. See
    corpus, the continuous single-run, continual multi-domain, and the "unfold curve"
    are laid out, with run commands, for the next agent in
    [`docs/NEXT-EXPERIMENTS.md`](docs/NEXT-EXPERIMENTS.md).
+8. **The reach-at-init moonshot** — the Prior-Fused hybrid reaches baseline quality *at
+   init* if the shared prior is *below* baseline, which needs a **context-4+** n-gram (a
+   sparse build; dense V⁴ times out). That's the path from the 30× hybrid to the literal
+   1000×. See [`docs/PRIOR-FUSED-PRISM.md`](docs/PRIOR-FUSED-PRISM.md).
 
 Geometric-alignment refinements contributed by Leonard Wang (PR #1, now merged)
 are available as opt-in flags — Grassmann geodesic direction pairing
@@ -369,6 +386,7 @@ README.md                  ← you are here (v0.2)
 docs/how-prism-works.html  ← the visual explainer (standalone, self-contained)
 docs/FINETUNE-RETENTION.md ← finetune without forgetting — the study + frontier
 docs/UNIFIED-ARC.md        ← PRISM pretraining + finetuning compound — the arc study
+docs/PRIOR-FUSED-PRISM.md  ← T9 × PRISM — a shared n-gram prior compounds (30× hybrid)
 docs/NEXT-EXPERIMENTS.md   ← handoff: the ranked next experiments + run commands
 WHITEPAPER.md              ← method + experiments in full
 RESULTS.md                 ← the committed runs and what they do / don't show
@@ -379,10 +397,13 @@ prism_modal.py             ← headless Modal runner (used for the committed run
 prism_modal_leo.py         ← isolated runner for the leo-test branch
 prism_modal_finetune.py    ← isolated runner for the finetune-retention benchmark
 prism_modal_arc.py         ← isolated runner for the arc (base-interaction) benchmark
+prism_modal_prior.py       ← isolated runner for the Prior-Fused (T9 × PRISM) benchmark
 unfold_curve.py            ← exploratory: the Σ*/"unfold curve" first cut (next-exp #5)
 src/prism_eval.py          ← the benchmark (schedule/overlap/teacher-sweep knobs)
 src/prism_finetune_eval.py ← the finetune-retention benchmark (anchor frontier)
 src/prism_arc_eval.py      ← the arc benchmark (matched-quality base interaction)
+src/prism_prior_eval.py    ← the Prior-Fused benchmark (n-gram × PRISM, 4 arms)
+src/build_ngram_prior.py   ← builds the shared n-gram prior (the "T9 dictionary")
 src/prism_accelerate.py    ← apply Prism to any checkpoint (the "use it" entry point)
 src/prism_finetune.py      ← finetune any checkpoint without forgetting (the technique)
 src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel + spectral_target
