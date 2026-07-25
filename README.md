@@ -1,3 +1,12 @@
+> # ⚠️ Moved — this project is now **[PRISM](https://github.com/timepointai/PRISM)**
+>
+> `nanogpt-prism-shakespeare` has been retired and **archived** (read-only). All
+> development continues at **[`timepointai/PRISM`](https://github.com/timepointai/PRISM)**.
+> The full code, committed results, and git history remain here as the reference the new
+> repo migrates from. Everything below is preserved as of the final state.
+
+---
+
 # Prism
 
 **v0.2** — the transfer results. ([v0.1 archived here](archive/v0.1/) — the
