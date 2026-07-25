@@ -1,0 +1,231 @@
+{
+  "schema": "prism-prior/1",
+  "partial": false,
+  "run_key": "prior_c3_str1.0_s1500_e25_bs32_seeds1337_r0",
+  "provenance": {
+    "created_utc": "2026-07-25T01:28:01.033386+00:00",
+    "git_commit": "56b57f8909b44eb7e3cc13f163b502cef5a72cf2",
+    "git_dirty": true,
+    "python": "3.11.12",
+    "argv": [
+      "--context=3",
+      "--student_steps=1500",
+      "--teacher_steps=2000",
+      "--eval_every=25",
+      "--eval_iters=100",
+      "--batch_size=32",
+      "--block_size=256",
+      "--seeds=1337",
+      "--arms=baseline,prism,prior,prism_prior",
+      "--tag=r0"
+    ],
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA L4"
+  },
+  "config": {
+    "context": 3,
+    "prior_strength": "1.0",
+    "teacher_steps": 2000,
+    "student_steps": 1500,
+    "eval_every": 25,
+    "eval_iters": 100,
+    "seeds": [
+      1337
+    ],
+    "arms": [
+      "baseline",
+      "prism",
+      "prior",
+      "prism_prior"
+    ],
+    "batch_size": 32,
+    "block_size": 256,
+    "device": "cuda",
+    "note": "scored as steps-to-baseline-best val loss (nats). loss is nanoGPT cross-entropy in NATS; bits/char = nats/ln(2)."
+  },
+  "baseline_best_step": {
+    "median": 1500,
+    "min": 1500,
+    "max": 1500,
+    "values": [
+      1500
+    ]
+  },
+  "runs": [
+    {
+      "seed": 1337,
+      "arms": {
+        "baseline": {
+          "init_val": 4.2812,
+          "best": 1.7781,
+          "best_step": 1500,
+          "at_end": 1.7781,
+          "score": {
+            "prism_score": 1.0,
+            "hit_step": 1500,
+            "reached_baseline_quality": true,
+            "baseline_target": 1.7781,
+            "left_censored": false,
+            "note": ""
+          }
+        },
+        "prism": {
+          "init_val": 3.1003,
+          "best": 1.5561,
+          "best_step": 1300,
+          "at_end": 1.5653,
+          "score": {
+            "prism_score": 15.0,
+            "hit_step": 100,
+            "reached_baseline_quality": true,
+            "baseline_target": 1.7781,
+            "left_censored": false,
+            "note": ""
+          }
+        },
+        "prior": {
+          "init_val": 1.8682,
+          "best": 1.7355,
+          "best_step": 1300,
+          "at_end": 1.7388,
+          "score": {
+            "prism_score": 3.75,
+            "hit_step": 400,
+            "reached_baseline_quality": true,
+            "baseline_target": 1.7781,
+            "left_censored": false,
+            "note": ""
+          }
+        },
+        "prism_prior": {
+          "init_val": 1.8589,
+          "best": 1.5495,
+          "best_step": 1300,
+          "at_end": 1.5583,
+          "score": {
+            "prism_score": 30.0,
+            "hit_step": 50,
+            "reached_baseline_quality": true,
+            "baseline_target": 1.7781,
+            "left_censored": false,
+            "note": ""
+          }
+        }
+      }
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "init_val": {
+        "median": 4.2812,
+        "min": 4.2812,
+        "max": 4.2812,
+        "values": [
+          4.2812
+        ]
+      },
+      "best": {
+        "median": 1.7781,
+        "min": 1.7781,
+        "max": 1.7781,
+        "values": [
+          1.7781
+        ]
+      },
+      "prism_score": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0,
+        "values": [
+          1.0
+        ]
+      },
+      "any_reached_at_init": false,
+      "any_left_censored": false
+    },
+    "prism": {
+      "init_val": {
+        "median": 3.1003,
+        "min": 3.1003,
+        "max": 3.1003,
+        "values": [
+          3.1003
+        ]
+      },
+      "best": {
+        "median": 1.5561,
+        "min": 1.5561,
+        "max": 1.5561,
+        "values": [
+          1.5561
+        ]
+      },
+      "prism_score": {
+        "median": 15.0,
+        "min": 15.0,
+        "max": 15.0,
+        "values": [
+          15.0
+        ]
+      },
+      "any_reached_at_init": false,
+      "any_left_censored": false
+    },
+    "prior": {
+      "init_val": {
+        "median": 1.8682,
+        "min": 1.8682,
+        "max": 1.8682,
+        "values": [
+          1.8682
+        ]
+      },
+      "best": {
+        "median": 1.7355,
+        "min": 1.7355,
+        "max": 1.7355,
+        "values": [
+          1.7355
+        ]
+      },
+      "prism_score": {
+        "median": 3.75,
+        "min": 3.75,
+        "max": 3.75,
+        "values": [
+          3.75
+        ]
+      },
+      "any_reached_at_init": false,
+      "any_left_censored": false
+    },
+    "prism_prior": {
+      "init_val": {
+        "median": 1.8589,
+        "min": 1.8589,
+        "max": 1.8589,
+        "values": [
+          1.8589
+        ]
+      },
+      "best": {
+        "median": 1.5495,
+        "min": 1.5495,
+        "max": 1.5495,
+        "values": [
+          1.5495
+        ]
+      },
+      "prism_score": {
+        "median": 30.0,
+        "min": 30.0,
+        "max": 30.0,
+        "values": [
+          30.0
+        ]
+      },
+      "any_reached_at_init": false,
+      "any_left_censored": false
+    }
+  }
+}
