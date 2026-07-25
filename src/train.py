@@ -25,6 +25,7 @@ from contextlib import nullcontext
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
@@ -95,6 +96,18 @@ val2_dir = '' # path to a dataset dir containing val.bin (same vocab/meta as the
 # (0 = off). Lets bases trained by different methods (plain vs Prism) be compared at
 # EQUAL old-domain quality — the control for the arc / base-interaction study.
 stop_val_target = 0.0
+# T9-style fixed shared n-gram prior fused into the logits (product of experts):
+#   final_logits = model_logits + prior_strength * log p_ngram(next | last C chars)
+# The model then learns only the RESIDUAL over the prior. prior_table = a .pt from
+# build_ngram_prior.py (dense (V^C, V) log-prob table + context_len). 0 strength = off
+# (byte-identical to a plain run).
+prior_table = ''
+prior_strength = 0.0
+# logit gate: scale the MODEL's logit contribution by min(1, iter/warmup) so it ramps
+# from 0 → 1. At init the fused output is the PURE prior (no random-logit noise), so a
+# prior that already matches the baseline puts the model at baseline quality before any
+# training. 0 = no gate (model contributes fully from step 0).
+logit_gate_warmup = 0
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -322,6 +335,47 @@ if compile:
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 
+# T9-style fixed n-gram prior fused into the logits (product of experts). Loaded once;
+# gathered per position by context index. prior_strength=0 → disabled (plain loss path).
+_prior_logtab = None
+_prior_C = 0
+_cur_gate = 1.0                 # model-logit gate (ramped in the loop if logit_gate_warmup>0)
+if prior_table and prior_strength > 0:
+    _pp = torch.load(prior_table, map_location=device, weights_only=False)
+    _prior_logtab = _pp['table'].to(device)               # (V^C, V) log-probs
+    _prior_C = int(_pp['context_len'])
+    assert _pp['vocab_size'] == model_args['vocab_size'], 'prior vocab != model vocab'
+    print(f"[prior] fused n-gram prior context={_prior_C} strength={prior_strength} "
+          f"(standalone val {_pp.get('val_bits_per_char', float('nan')):.3f} bits/char)")
+
+
+def _prior_logp(X):
+    """(B,T,V) prior log-probs for predicting the next char at each position, gathered by
+    the C-char context ending at each position. First C-1 positions get 0 (uniform)."""
+    B, T = X.shape
+    idx = torch.zeros(B, T, dtype=torch.long, device=X.device)
+    V = model_args['vocab_size']
+    for off in range(_prior_C - 1, -1, -1):               # oldest char first
+        if off > 0:
+            sh = torch.zeros_like(X)
+            sh[:, off:] = X[:, :-off]
+        else:
+            sh = X
+        idx = idx * V + sh
+    lp = _prior_logtab[idx]                                # (B,T,V)
+    if _prior_C > 1:
+        lp[:, :_prior_C - 1, :] = 0.0                      # incomplete context → uniform
+    return lp
+
+
+def _loss(logits, X, Y, model_loss):
+    """Fused cross-entropy when a prior is active, else the model's own loss."""
+    if _prior_logtab is None:
+        return model_loss
+    fused = _cur_gate * logits + prior_strength * _prior_logp(X)
+    return F.cross_entropy(fused.view(-1, fused.size(-1)), Y.view(-1), ignore_index=-1)
+
+
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
 def estimate_loss():
@@ -333,7 +387,7 @@ def estimate_loss():
             X, Y = get_batch(split)
             with ctx:
                 logits, loss = model(X, Y)
-            losses[k] = loss.item()
+            losses[k] = _loss(logits, X, Y, loss).item()
         out[split] = losses.mean()
     model.train()
     return out
@@ -369,6 +423,11 @@ while True:
     lr = get_lr(iter_num) if decay_lr else learning_rate
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+    # logit gate: ramp the model's contribution 0 → 1 (updated before the eval below, so
+    # the step-0 eval reflects the pure prior). Only meaningful when a prior is fused.
+    if logit_gate_warmup > 0:
+        _cur_gate = min(1.0, iter_num / logit_gate_warmup)
 
     # evaluate the loss on train/val sets and write checkpoints. Also force an eval on
     # the first step (captures retention_at_base when resuming a finetune) and the last
@@ -426,6 +485,7 @@ while True:
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
             logits, loss = model(X, Y)
+            loss = _loss(logits, X, Y, loss)   # fuse the T9 n-gram prior if active
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
             # representational transfer: pull student block activations toward the
             # teacher's on this same batch (linear-CKA distance). Uses the acts the

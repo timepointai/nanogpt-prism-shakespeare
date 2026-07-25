@@ -326,6 +326,16 @@ confirms it is the spectral geometry, not the learning rate. A spectrally health
 is a better anchor — pretraining and finetuning with PRISM reinforce each other
 ([`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md)).
 
+**And PRISM's geometric prior compounds with a statistical one.** Fusing a fixed shared
+n-gram prior into the logits (product of experts, so the model learns only the residual)
+stacks with the spectral init: measured as steps-to-baseline quality, PRISM alone is 15×,
+the n-gram prior alone 3.8×, and the hybrid 30× — double PRISM — while reaching the best
+loss of all (below baseline, PRISM-alone, and the n-gram floor, since PRISM's geometry
+breaks the residual below what the prior reaches). A context-3 char n-gram already predicts
+Shakespeare val at ≈ the neural baseline's rate, so the prior pre-loads local structure for
+free while PRISM pre-loads the representational geometry
+([`docs/PRIOR-FUSED-PRISM.md`](docs/PRIOR-FUSED-PRISM.md)).
+
 **If overfitting is removed, the scaling calculus changes.** The recipe does not
 overfit through 5,000 steps at either learning rate; whether it *never* does is
 the endurance question, and whether the immunity transfers cross-domain is open.

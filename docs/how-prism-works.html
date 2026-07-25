@@ -682,6 +682,15 @@ measured (nanoGPT Shakespeare-char, 10.65M params, 3 seeds, committed artifacts)
     no spectral) forgets MORE, so it is the SPECTRAL GEOMETRY, not the learning rate. A
     spectrally-healthy base is a better anchor; PRISM pretraining + finetuning reinforce.
 
+(4) prior-fusion — geometry COMPOUNDS with statistics (docs/PRIOR-FUSED-PRISM.md)
+  fuse a fixed shared n-gram prior into the logits (product of experts: final =
+  model_logits + lambda*log p_ngram(next|last C chars)); model learns only the residual.
+  measured (1 seed, steps-to-baseline-best): PRISM alone 15x, n-gram prior alone 3.8x,
+  HYBRID 30x — double PRISM — reaching the best loss of all (below baseline, prism-alone,
+  and the n-gram floor; PRISM's geometry breaks the residual below the prior). A context-3
+  char n-gram already predicts Shakespeare val at ~2.57 bits/char = the neural baseline.
+  (literal 1000x reach-at-init is a knife-edge; needs a context-4+ prior below baseline.)
+
 bounds: transfer results are 100-step probes; far corpus is same-language prose;
         no generic-regularization control yet; 10.65M params only. Finetune-retention
         shows old-domain RETENTION (not new-domain overfit prevention), far=Sherlock.

@@ -133,6 +133,21 @@ the enwik8-scale version. Not a Hutter entry. Trap to avoid: the lossy keypad-di
 "literal T9" ≤ direct coding (data-processing inequality) — demo only. Full spec in
 `project_prism_sigma_star`.
 
+### 6. The reach-at-init moonshot (from the 30× hybrid to 1000×)
+
+[Prior-Fused PRISM](PRIOR-FUSED-PRISM.md) already showed the hybrid at **30×**. The
+literal **1000×** — the fused model at baseline quality *before any training* — needs the
+shared prior to sit *clearly below* the baseline's loss so the fused init already beats it.
+Context-3 tops out *at* baseline (2.57 ≈ 2.565 bits/char), a knife-edge, and the `logit_gate`
+that would enable reach-at-init backfired (throttled early learning, 30× → 15×). **The one
+missing piece: a context-4+ n-gram prior**, which is clearly below baseline but needs a
+**sparse build** — the dense V⁴ table (65⁴×65) is too big and `build_ngram_prior.py` times
+out on it. Build a sparse (hashed-context) n-gram + a sparse gather in `train.py`'s
+`_prior_logp`, confirm the prior dips below baseline on val, then re-run
+`prism_prior_eval.py` with the gate *off* (it hurt) and read the reach-at-init speedup on
+the `prior` / `prism_prior` arms. Also fix the block-edge inflation (first C-1 positions
+per window lack in-window context → currently uniform; back off to a lower order instead).
+
 ## Ground rules (again, because they matter)
 
 A number in these docs has a matching committed `results/*.json`. Attribution needs
