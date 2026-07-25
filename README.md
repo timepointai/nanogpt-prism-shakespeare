@@ -134,6 +134,16 @@ That splits PRISM's geometry cleanly in two, and the halves are complementary:
 **Structure transfers; content must be retained.** Full study, 3-seed frontier, and
 honest bounds: [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
 
+### They compound
+
+And the two directions **stack**: a base that was itself PRISM-*pretrained* makes a
+much better thing to anchor-*finetune*. At *matched* Shakespeare quality, a PRISM base
+finetunes on Sherlock with **≈ zero forgetting** (vs +0.05 nats for a plain base) and
+adapts **~8% better** — and a schedule-matched plain control confirms it's the **spectral
+geometry**, not the learning rate. A spectrally-healthy base is a dramatically better
+anchor; pretraining and finetuning with PRISM genuinely reinforce each other. Full study:
+[`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md).
+
 ## Use it
 
 Two entry points — one per direction. **Transfer** into a fresh model with
@@ -333,6 +343,12 @@ adaptation (new domain) and retention (old domain) every step. See
    directions may diverge more; a decaying pull to remove the anchor's late
    adaptation give-back; and the new-domain-overfit case the current frontier didn't
    exercise. See [`docs/FINETUNE-RETENTION.md`](docs/FINETUNE-RETENTION.md).
+7. **Teacher-free init & the rest** — the biggest open lead: if the spectrum is a
+   *modality* constant, you could PRISM-init a fresh model from an unrelated corpus's
+   fingerprint — **no teacher** — and keep the ~12× head start. That plus the truly-far
+   corpus, the continuous single-run, continual multi-domain, and the "unfold curve"
+   are laid out, with run commands, for the next agent in
+   [`docs/NEXT-EXPERIMENTS.md`](docs/NEXT-EXPERIMENTS.md).
 
 Geometric-alignment refinements contributed by Leonard Wang (PR #1, now merged)
 are available as opt-in flags — Grassmann geodesic direction pairing
@@ -352,6 +368,8 @@ truly-far modality above, where the plain recipe may finally need the help.
 README.md                  ← you are here (v0.2)
 docs/how-prism-works.html  ← the visual explainer (standalone, self-contained)
 docs/FINETUNE-RETENTION.md ← finetune without forgetting — the study + frontier
+docs/UNIFIED-ARC.md        ← PRISM pretraining + finetuning compound — the arc study
+docs/NEXT-EXPERIMENTS.md   ← handoff: the ranked next experiments + run commands
 WHITEPAPER.md              ← method + experiments in full
 RESULTS.md                 ← the committed runs and what they do / don't show
 results/                   ← eval artifacts. the evidence.
@@ -360,8 +378,11 @@ archive/v0.0/              ← the earliest pass, before attribution
 prism_modal.py             ← headless Modal runner (used for the committed runs)
 prism_modal_leo.py         ← isolated runner for the leo-test branch
 prism_modal_finetune.py    ← isolated runner for the finetune-retention benchmark
+prism_modal_arc.py         ← isolated runner for the arc (base-interaction) benchmark
+unfold_curve.py            ← exploratory: the Σ*/"unfold curve" first cut (next-exp #5)
 src/prism_eval.py          ← the benchmark (schedule/overlap/teacher-sweep knobs)
 src/prism_finetune_eval.py ← the finetune-retention benchmark (anchor frontier)
+src/prism_arc_eval.py      ← the arc benchmark (matched-quality base interaction)
 src/prism_accelerate.py    ← apply Prism to any checkpoint (the "use it" entry point)
 src/prism_finetune.py      ← finetune any checkpoint without forgetting (the technique)
 src/prism_init.py          ← Spectral Imprint + EigenTransfer + Mod Wheel + spectral_target

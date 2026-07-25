@@ -318,6 +318,14 @@ the mod wheel self-anchored for up to ~10× less catastrophic forgetting at a tu
 adaptation cost, with the attribution establishing it is neither the spectral
 geometry nor merely a smaller learning rate that buys it.
 
+**And the two directions compound.** A base that was itself PRISM-pretrained makes a
+much better thing to finetune-anchor than a plain base of *equal* quality: at matched
+Shakespeare val (3 seeds), a PRISM base finetunes on Sherlock with ≈ zero forgetting
+(vs +0.05 for plain) and adapts ~8% better, and a schedule-matched plain control
+confirms it is the spectral geometry, not the learning rate. A spectrally healthy base
+is a better anchor — pretraining and finetuning with PRISM reinforce each other
+([`docs/UNIFIED-ARC.md`](docs/UNIFIED-ARC.md)).
+
 **If overfitting is removed, the scaling calculus changes.** The recipe does not
 overfit through 5,000 steps at either learning rate; whether it *never* does is
 the endurance question, and whether the immunity transfers cross-domain is open.
